@@ -9,23 +9,23 @@ void setup(){
     Serial.begin(115200);
     Serial.println("In Setup...");
     analogReadResolution(16);
-    analogWriteResolution(6);
+    analogWriteResolution(16);
     Serial.println("Setup finished!");
 }
 
 void loop(){
     Serial.println("in loop");
     // 确定输入输出的方向
-    pinMode(A3, OUTPUT);
     pinMode(A4, OUTPUT);
+    pinMode(A5, OUTPUT);
 
-    analogWrite(isForward ? A3 : A4, 65535);
-    analogWrite(isForward ? A4 : A3, 0);
+    analogWrite(isForward ? A4 : A5, 65535);
+    analogWrite(isForward ? A5 : A4, 0);
 
     Serial.print("isForward: ");
     Serial.println(isForward);
 
-    // readValue = analogRead(isForward ? A3 : A4);
+    // readValue = analogRead(isForward ? A4 : A5);
     // Serial.println(readValue);
 
     isForward = !isForward;
