@@ -3,11 +3,9 @@
 #pragma once
 
 #include <Chrono.h>
-// #include "ToolBoxIndex.h"
-// #include
-// "/Users/Mr_Li/Documents/博士课题项目/ProjectCasablanca/AgentMsgIndex.h"
-// #include "/Users/Mr_Li/Documents/博士课题项目/ProjectCasablanca/IOIndex.h"
-#include "/Users/Mr_Li/Documents/博士课题项目/ProjectCasablanca/AnalogReader.h"
+#include<max6675.h>
+
+MAX6675 thermalCouple(D2,D3,D4); //SCLK,CS,MISO
 
 #define PIN_MEASUREMENT A1
 #define PIN_ENABLE D10
@@ -24,9 +22,7 @@ long readValue = 0;
 
 const int SAMPLING_INTERVAL = 1000;
 
-AnalogReader windowSensorReader(A1,
-                                12,
-                                10);  //(PIN_MEASUREMENT, ANALOG_RESOLUTION,3);
+
 
 void setup() {
   Serial.begin(115200);
@@ -46,14 +42,12 @@ void loop() {
   if (sampleChrono.hasPassed(SAMPLING_INTERVAL)) {
     sampleChrono.restart();
     digitalWrite(PIN_ENABLE, SWITCH_ENABLE);  // 串联继电器连通 使能
-    Serial.println("D5 low");
     delay(TIME_STARTUP);
     // 读取
     readValue = analogRead(PIN_MEASUREMENT);
     // 读取部分
 
     digitalWrite(PIN_ENABLE, SWITCH_DISABLE);
-    Serial.println("D5 high");
 
     Serial.println(readValue);
   }
