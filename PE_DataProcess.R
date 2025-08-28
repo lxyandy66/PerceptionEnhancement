@@ -3,7 +3,7 @@ options(digits.secs=3)
 # 读取原始数据
 data.pe.raw<-read.xlsx("基本测量/forProcess_电阻+温度_Page样品_ITO玻璃.xlsx",1)%>%as.data.table()
 data.pe.raw<-fread("基本测量/250730_D_1K.csv")%>%rbind(fread("基本测量/250731_D_1k.csv"))%>%as.data.table()
-data.pe.raw<-fread("基本测量/250730_P4A_100K.csv")%>%rbind(fread("基本测量/250731_P4A_100K.csv"))%>%as.data.table()
+data.pe.raw<-fread("基本测量/0816-field-inv-2.csv")%>%as.data.table()
 
 
 #### 数据格式 ####
@@ -27,47 +27,26 @@ for(i in unique(data.pe.raw$test_id)){
 data.pe.raw.test<-data.pe.raw#[test_id=="250730_P4A_100k"]
 data.pe.raw.test$msgJson<-lapply(data.pe.raw.test$msg_content,FUN = jsonToListProcessor)
 
-nameFromJson<-c("id","rq","dt","temp_in")
+nameFromJson<-c( "rq","T_IN","T_OUT","R_ITO","R_AgNW","L_IN" )#c("id","rq","dt","temp_in")
 data.pe.raw.test[,':='(reqId=extractFromList(msgJson,"rq"),
-                   odt=extractFromList(msgJson,"dt"),temp_in=extractFromList(msgJson,"temp_in"))]
-data.pe.raw.test[,resist:=odt/(65535-odt)*100000]#100000
+                   # odt=extractFromList(msgJson,"dt"),
+                   # temp_in=extractFromList(msgJson,"temp_in"),
+                   t_in=extractFromList(msgJson,"T_IN"),
+                   t_out=extractFromList(msgJson,"T_OUT"),
+                   r_ITO=extractFromList(msgJson,"R_ITO"),
+                   r_AgNW=extractFromList(msgJson,"R_AgNW"),
+                   l_in=extractFromList(msgJson,"L_IN")
+                   )]
+
+# data.pe.raw.test[,resist:=odt/(65535-odt)*100000]#100000
+data.pe.raw.test[,r_ITO:=r_ITO/(65535-r_ITO)*2000]#100000
+data.pe.raw.test[,r_AgNW:=r_AgNW/(65535-r_ITO)*10000]#100000
 
 data.pe.raw.test<-data.pe.raw.test[resist<3e05]
 
-#### 异常值识别 ####
-# 简单测试
-data.pe.raw$temperature[210:219]%>%{
-    range(mean(.)-2*sd(.),mean(.)+2*sd(.))
-}
-data.pe.raw$temperature[210:219]%>%sd()
-# 批量处理
-# 温度异常值
-data.pe.raw.outlierCheck<-data.table(id=data.pe.raw$id)
-data.pe.raw.outlierCheck[,c(paste("tempOut",c(0:9),sep="_"),paste("resistOut",c(0:9),sep="_")) := .( as.logical(NA))]
-for(i in c(0:nrow(data.pe.raw)%/%10)){ #一次批量处理10个（确定滑动次数
-    for(j in c(0:9)){ #滑窗起始位置
-        cat("i=",i," j=",j,"\n")
-        rangeTemp<-outlierDetector(data.pe.raw[c((i*10+j):(i*10+j+10))]$temperature) #滑窗大小
-        data.pe.raw.outlierCheck[c((i*10+j):(i*10+j+10)),paste("tempOut",j,sep="_")]<-
-            data.pe.raw[c((i*10+j):(i*10+j+10))]$temperature > rangeTemp[1]&data.pe.raw[c((i*10+j):(i*10+j+10))]$temperature < rangeTemp[2]
-    }
-}
-data.pe.raw.outlierCheck$tempOutSum<-apply(X = data.pe.raw.outlierCheck[,c(paste("tempOut",c(0:9),sep="_"))],MARGIN = 1,
-                                           FUN = function(x){    sum(x==FALSE)/sum(!is.na(x)) })
-data.pe.raw.outlierCheck$tempOutFlag<-data.pe.raw.outlierCheck$tempOutSum>0.7
-# 电阻异常值
-for(i in c(0:nrow(data.pe.raw)%/%10)){ #一次批量处理10个（确定滑动次数
-    for(j in c(0:9)){
-        cat("i=",i," j=",j,"\n")
-        rangeTemp<-outlierDetector(data.pe.raw[c((i*10+j):(i*10+j+10))]$resistance)
-        data.pe.raw.outlierCheck[c((i*10+j):(i*10+j+10)),paste("resistOut",j,sep="_")]<-
-            data.pe.raw[c((i*10+j):(i*10+j+10))]$resistance > rangeTemp[1]&data.pe.raw[c((i*10+j):(i*10+j+10))]$resistance < rangeTemp[2]
-    }
-}
-data.pe.raw.outlierCheck$resistOutSum<-apply(X = data.pe.raw.outlierCheck[,c(paste("resistOut",c(0:9),sep="_"))],MARGIN = 1,
-                                             FUN = function(x){    sum(x==FALSE)/sum(!is.na(x)) })
-data.pe.raw.outlierCheck$resistOutFlag<-data.pe.raw.outlierCheck$resistOutSum>0.8
-#!!电阻处理的结果比较理想
+#### 异常值识别结果导出 ####
+
+data.pe.raw.test<-merge(x=data.pe.raw.test,y=data.pe.raw.outlierCheck.out,by.x="rec_time",by.y = "chkId",all.x=TRUE)
 
 # 异常概率合并至原始数据
 data.pe.raw<-merge(x = data.pe.raw,y = data.pe.raw.outlierCheck[,c("id","tempOutSum","tempOutFlag","resistOutSum","resistOutFlag")],by="id",all.x = TRUE) #
@@ -93,8 +72,9 @@ tmp<-data.pe.raw.test[id>1800,c("temp_in","resist","data_label","test_id")]%>%.[
 #### 数据相关性验证 ####
 # 数据可视化
 # 时序数据
-ggplot(data = data.pe.raw.test[,c("rec_time","resist","temp_in","data_label","id","test_id")]%>%.[,temp_in:=temp_in*5000]%>%melt(.,id.var=c("id","rec_time","data_label","test_id")),
-       aes(x=id,y=value,color=variable,lty=variable,group=variable))+geom_line()+scale_y_continuous(sec.axis = sec_axis(~./5000))+facet_wrap(~test_id,nrow = 2)+
+ggplot(data = data.pe.raw.test[,c("rec_time","r_ITO","r_AgNW","t_in","t_out","id")]%>%
+           .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*30,10,onlyPast = FALSE),r_ITO=r_ITO*5)]%>% .[,c("rec_time","r_ITO","r_AgNW","t_mid","id")]%>%melt(.,id.var=c("id","rec_time")),
+       aes(x=rec_time,y=value,color=variable,lty=variable,group=variable))+geom_line()+scale_y_continuous(sec.axis = sec_axis(~./30))+#facet_wrap(~test_id,nrow = 2)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 ggplot(data = data.pe.raw.test[test_id=="250730_P4A_100k",c("rec_time","temp_in","resist","data_label","id")]%>%.[,temp_in:=temp_in*5000]%>%melt(.,id.var=c("id","rec_time","data_label")),
@@ -103,8 +83,7 @@ ggplot(data = data.pe.raw.test[test_id=="250730_P4A_100k",c("rec_time","temp_in"
 
 
 # 相关性可视化id>1500&!data_label%in%c(NA,"0,1")
-ggplot(data = data.pe.raw.test[!data_label%in%c("0,1","1")&resist>1e05&temp_in<45,#rec_time>as.POSIXct("2025-07-31 18:30:00")&test_id=="250731_D_1k",#
-                               c("temp_in","resist","data_label","test_id")],aes(x=temp_in,y=resist))+geom_point(alpha=0.2,color="blue")+#ylim(c(0,6000))+
+ggplot(data = data.pe.raw.test[rec_time>as.POSIXct("2025-08-16 17:00:00")],aes(x=t_in,y=r_AgNW))+geom_point(alpha=0.2,color="blue",position = "jitter")+#ylim(c(0,6000))+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))#,legend.position = c(0.12,0.88))#88，12
 
 ggplot(data = data.pe.raw.test[!data_label%in%c("0,1","1")&resist>1e05,#rec_time>as.POSIXct("2025-07-30 14:30:00")&test_id=="250730_D_1k",#rec_time>as.POSIXct("2025-07-31 18:30:00")&test_id=="250731_D_1k",#
@@ -119,8 +98,8 @@ cor(data.pe.raw[state=="cooling",c("modiTemp","modiResist")],method = "spearman"
 
 
 # 平滑数据
-outlierDetector<-function(x){
+outlierDetector<-function(x,multipleSd=1.5){
     if(anyNA(x))
         warning("NA detected, function continue...",immediate. = TRUE)
-    return(range(mean(x,na.rm=TRUE)-1.5*sd(x,na.rm=TRUE),mean(x,na.rm=TRUE)+1.5*sd(x,na.rm=TRUE),na.rm=TRUE))
+    return(range(mean(x,na.rm=TRUE)-multipleSd*sd(x,na.rm=TRUE),mean(x,na.rm=TRUE)+multipleSd*sd(x,na.rm=TRUE),na.rm=TRUE))
 }
