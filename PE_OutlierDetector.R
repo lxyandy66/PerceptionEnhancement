@@ -43,3 +43,31 @@ outputCol<-c("chkId","t_inOutSum","t_inOutFlag","t_outOutSum","t_outOutFlag","r_
 #### 输出结果 ####
 data.pe.raw.outlierCheck.out<-data.pe.raw.outlierCheck[,..outputCol]
 
+
+
+# 测一下聚类方法的处理
+nn<-tmp.pe.raw.outlierCheck[rec_time<as.POSIXct("2025-08-16 16:45:00")&rec_time<as.POSIXct("2025-08-16 17:15:00")]
+nn2<-outlierModify(nn$r_ITO,nn$rec_time)
+
+nn1<-stl(ts(nn$r_ITO),"periodic",robust=TRUE,na.action =  na.pass)
+
+#
+id<-nn$rec_time
+data<-nn$r_ITO
+
+
+return()
+if(anyNA(data))
+    warning("NA detected, function continue...",immediate. = TRUE)
+data<-na.omit(data)
+
+maxCluster<-ifelse(nrow(temp.outlier[outlierCluster==1])>
+                       nrow(temp.outlier[outlierCluster==2]),1,2)
+temp.stat.outlier<-temp.outlier[,.(cluster1=length(dt[outlierCluster==1]),
+                                   cluster2=length(dt[outlierCluster==2])),by=acCode]
+if(maxCluster==1){
+    return(temp.stat.outlier[cluster1>=cluster2]$acCode)
+}else{
+    return(temp.stat.outlier[cluster1<=cluster2]$acCode)
+}
+
