@@ -1,5 +1,6 @@
 #### 用于处理其余数据源的脚本 ####
 
+################################################################################
 
 #### 用于处理DAM采集的数据####
 # 会同时采集DAM的模拟量数据和IoT的温度数据，均收集在同一个csv文件中 需要单独处理
@@ -19,18 +20,20 @@ data.pe.raw.test[,':='(A0=extractFromList(msgJson,nameFromJson[1]),
                        A1=extractFromList(msgJson,nameFromJson[2]),
                        A2=extractFromList(msgJson,nameFromJson[3]))]
 
+################################################################################
 
 #### 用于处理电化学工作站数据的脚本 ####
 # 数据读取
-data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/Part_LIXY251020/StableVoltage/251020_EA1_ECM_1.csv",
+data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECS_ExportData/251021_PY1_ECM_1.csv",
                        data.table = TRUE,skip=3,sep=",",col.names = c("time","voltage","current","reverseI","charge","vRange","iRange"))
 # 这个charge以后可以用
 data.pe.ecs.raw[,resistance:=voltage/current]
 
+################################################################################
 
 #### 用于处理气象站数据的脚本 ####
 # 原数据为分钟级别数据
-data.pe.weather.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/CityU_10-24-25_12-00_AM_3_Day_1761564179_v2.csv",
+data.pe.weather.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/251024-251026_CityU_WeatherStation.csv",
                        data.table = TRUE,skip=5,col.names = c("time","t_env","hum","wind","rad"))
 data.pe.weather.raw[,time:=mdy_hm(time,tz="PRC")]
 
@@ -40,5 +43,6 @@ data.pe.weather.sec<-data.table(datetime=seq.POSIXt(from = as.POSIXct("2025-10-2
 data.pe.weather.sec<-merge(x=data.pe.weather.sec,y=data.pe.weather.raw[,isApprox:=FALSE],all.x = TRUE,by.x = "datetime",by.y="time")
 data.pe.weather.sec[is.na(isApprox)]$isApprox<-TRUE
 
-data.pe.weather.sec[1:172741,c("t_env","hum","wind","rad")]<-data.pe.weather.sec[,lapply(.SD,na.approx),.SDcols=c("t_env","hum","wind","rad")]
+data.pe.weather.sec[1:172741,c("t_env","hum","wind","rad")]<-#时间应对应，全时间段除去最后1min数据，此处为172741
+    data.pe.weather.sec[,lapply(.SD,na.approx),.SDcols=c("t_env","hum","wind","rad")]
 
