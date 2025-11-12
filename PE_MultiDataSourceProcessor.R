@@ -24,7 +24,7 @@ data.pe.raw.test[,':='(A0=extractFromList(msgJson,nameFromJson[1]),
 
 #### 用于处理电化学工作站数据的脚本 ####
 # 数据读取
-data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECS_ExportData/251021_PY1_ECM_1.csv",
+data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_ExportData/251112_CY1_ECM_1.csv",
                        data.table = TRUE,skip=3,sep=",",col.names = c("time","voltage","current","reverseI","charge","vRange","iRange"))
 # 这个charge以后可以用
 data.pe.ecs.raw[,resistance:=voltage/current]
@@ -46,3 +46,24 @@ data.pe.weather.sec[is.na(isApprox)]$isApprox<-TRUE
 data.pe.weather.sec[1:172741,c("t_env","hum","wind","rad")]<-#时间应对应，全时间段除去最后1min数据，此处为172741
     data.pe.weather.sec[,lapply(.SD,na.approx),.SDcols=c("t_env","hum","wind","rad")]
 
+
+################################################################################
+
+#### 用于从树莓派数据导出的脚本 ####
+
+conn<-dbConnect(MySQL(),dbname="PerceptionEnhancement",user="root",password="K",host="192.168.43.139")
+dbListTables(conn)
+dbSendQuery(conn,'SET NAMES utf8')
+data.pe.raspi.raw<-as.data.table(dbReadTable(conn,"serialacquisition")) #251105查询一共34w条数据
+dbDisconnect(conn)
+
+# 读取需要导出的数据
+tmp.pe.outputlist<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECS_IoT数据/RaspPi_LogList.csv",data.table = TRUE)
+tmp.pe.outputlist<-tmp.pe.outputlist[5:34] # 去掉一些之前测试的行
+fwrite(tmp.pe.outputlist,"fwriteTest.csv")
+
+for(i in unique(tmp.pe.outputlist$test_id)){
+    fwrite(data.pe.raspi.raw[test_id==i],paste("/Volumes/Stroage/PercepetionEnhancement_Share/ECS_IoT数据/批量导出/",i,".csv",sep=""))
+}
+
+rm(data.pe.raspi.raw)
