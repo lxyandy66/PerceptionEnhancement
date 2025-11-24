@@ -132,20 +132,25 @@ nn<-ts(tmp$r_AgNW)%>%ets
 
 #### 数据相关性验证 ####
 # 数据可视化
+
+# 导入需要可视化的数据
+data.pe.raw.test<-fread("Data_TransformLearning/AY1_ECS.csv")
+data.pe.raw.test$rec_time<-as.POSIXct(data.pe.raw.test$rec_time)
+
 # 时序数据
 ggplot(data = data.pe.raw.test[,c("rec_time","t_in","t_out","t_env","l_in","l_out","msg_id","resistance")]%>%
            #.[,r_nor:=scale(resistance)]%>%
            # .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*40000,10,onlyPast = FALSE))]%>% .[,c("rec_time","r_ITO_est","t_mid","id")]
-           .[,":="(t_in=(t_in)*50,t_out=(t_out)*50,t_env=(t_env)*50,l_in=l_in*10,l_out=l_out*10)]%>%.[,c("rec_time","resistance","t_in","t_out","l_in","l_out","msg_id","t_env")]%>%
+           .[,":="(t_in=(t_in)*5E1,t_out=(t_out)*5E1,t_env=(t_env)*5E1,l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_in","t_out","l_in","l_out","msg_id","t_env")]%>%
                melt(.,id.var=c("msg_id","rec_time")),
        aes(x=rec_time,y=value,color=variable,lty=variable,group=variable))+geom_line()+
-    labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./50),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
+    labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./5E1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 
 # 相关性可视化id>1500&!data_label%in%c(NA,"0,1")
 ggplot(data = data.pe.raw.test[],#%>%.[,r_nor:=scale(resistance)],
-       aes(x=t_out,y=resistance))+geom_point(alpha=0.2,color="blue",position = "jitter")+#ylim(c(0,6000))+
+       aes(x=t_out,y=smtResistance))+geom_point(alpha=0.2,color="blue",position = "jitter")+#ylim(c(0,6000))+
     labs(y="Resistance",x="Temperature")+theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))#,legend.position = c(0.12,0.88))#88，12
 
 ggplot(data = data.pe.raw.test[!is.na(test_id),c("t_out","t_in","smtResistance","test_id")]%>%
@@ -156,13 +161,8 @@ ggplot(data = data.pe.raw.test[!is.na(test_id),c("t_out","t_in","smtResistance",
 #删去多余行
 data.pe.raw.test[,":="(msg_content=NULL,log_id=NULL,msgJson=NULL,reqId=NULL,data_label=NULL,id=NULL,r_nor=NULL)]
 data.pe.raw.test[,":="(r_ITO=NULL,r_nor=NULL)] #仅适用于ECS数据记录中IoT设备
-write.csv(data.pe.raw.test[,-"smtResistance"],file="AA1_ECS.csv")
+write.csv(data.pe.raw.test[,-"smtResistance"],file="CY1_ECS.csv")
 # write.xlsx(data.pe.raw.test,file="251016_PreTest.xlsx")
-
-
-
-# 相关性分析
-cor(data.pe.raw[state=="cooling",c("modiTemp","modiResist")],method = "spearman")
 
 
 # 平滑数据
