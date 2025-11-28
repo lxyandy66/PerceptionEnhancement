@@ -55,11 +55,11 @@ table(data.pe.post[,c("labelIdCyc","status")])%>%View
 for(i in unique(data.pe.post$dataset_source)){
     {
         ggsave(filename = paste(i,"_cleaned_norm.png",sep=""),width=13,height = 5,dpi=100,
-               plot=
-                   ggplot(data = data.pe.post[dataset_source==i,c("msg_id","t_in_norm","t_out_norm","t_env_norm","l_in_norm","l_out_norm","resistance_norm")]%>%
-                              melt(.,id.var=c("msg_id")),
+               plot=#data.pe.post[dataset_source==i
+                   ggplot(data = data.pe.post[dataset_source==i,c("msg_id","t_in_norm","t_out_norm","t_env_norm","l_in_norm","l_out_norm","resistance_norm","dataset_source")]%>%
+                              melt(.,id.var=c("msg_id","dataset_source")),
                           aes(x=msg_id,y=value,color=variable,lty=variable,group=variable))+geom_line()+
-                   labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
+                   labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./1),name = "Temperature"))+facet_wrap(~dataset_source,nrow = 2)+
                    theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
         )
         ggsave(filename = paste(i,"_cleaned.png",sep=""),width=13,height = 5,dpi=100,
@@ -83,8 +83,8 @@ for(i in unique(data.pe.post$dataset_source)){
 # 可视化
 boxplot(formula=resistance~dataset_source,data = data.pe.post[!dataset_source %in% c("AA1_ECS","AY1_ECS")])
 
-ggplot(data = data.pe.post,
-       aes(x=resistance_norm ,y=t_out_norm,color=dataset_source))+geom_point(alpha=0.2,position = "jitter")+facet_wrap(~dataset_source,nrow=3)+
+ggplot(data = data.pe.post.field,#data.pe.post[dataset_source%in%selTestId]
+       aes(x=resistance_norm ,y=t_out_norm,color=dataset_source))+geom_point(alpha=0.1,position = "jitter")+#facet_wrap(~dataset_source,nrow=3)+
     labs(y="Resistance",x="Temperature")+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
@@ -239,7 +239,7 @@ for(i in unique(stat.pe.post.lcst$test_id)){
 stat.pe.pred.illum.sel<-data.table(test_id=as.character(NA),count=as.numeric(NA),targetStatus=as.character(NA),
                                   rSquare=as.numeric(NA),MAPE=as.numeric(NA),RMSE=as.numeric(NA))[-1]
 
-stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId]%>%{
+stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId& dataset_source!="CY1_ECS"]%>%{
     for(i in unique(data.pe.post$dataset_source)){
         
     }
@@ -270,18 +270,20 @@ stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId]%>%{
     stat.pe.pred.illum.sel
 }
 
-ggplot(data.pe.post[dataset_source%in% selTestId],aes(x=msg_id))+geom_point(aes(x=msg_id,y=l_out_norm,color="origin"))+geom_point(aes(x=msg_id,y=l_in_norm,color="allPred",lty="dash"))+geom_point(aes(x=msg_id,y=resistance_norm,color="resistance",lty="dash"))+
+ggplot(data.pe.post[dataset_source%in% selTestId & dataset_source!="CY1_ECS"],aes(x=msg_id))+geom_point(aes(x=msg_id,y=l_out_norm,color="origin"))+geom_point(aes(x=msg_id,y=l_in_norm,color="allPred",lty="dash"))+geom_point(aes(x=msg_id,y=resistance_norm,color="resistance",lty="dash"))+
     geom_line(aes(x=msg_id,y=t_out_allPred,color="allPred",lty="dash"))+geom_line(aes(x=msg_id,y=predL,color="divPred",lty="dash"))+facet_wrap(.~dataset_source)
 
-ggplot(data.pe.post[dataset_source%in% selTestId])+
-    geom_line(aes(x=msg_id,y=t_out_norm,color="Measurement"),lty="solid",size=1)+geom_line(aes(x=msg_id,y=t_out_divPred,color="Regression"),lty="dashed",size=0.75)+
-    facet_wrap(.~dataset_source,nrow=3)+labs(y="Temperature",x="Time (s)")+
+ggplot(data.pe.post[dataset_source%in% selTestId& dataset_source!="CY1_ECS"])+
+    geom_line(aes(x=msg_id,y=Delta_L_norm,color="Measurement"),lty="solid",size=1)+geom_line(aes(x=msg_id,y=dL_divPred,color="Regression"),lty="dashed",size=0.75)+
+    facet_wrap(.~dataset_source,nrow=3)+labs(y="Illuminance",x="Time (s)")+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 # 仅对比
-ggplot(data.pe.post[dataset_source%in%selTestId],aes(x=t_out_norm))+
-    geom_point(aes(x=t_out_norm,y=t_out_divPred),position = "jitter",color="blue",alpha=0.03)+geom_line(aes(x=t_out_norm,y=t_out_norm),color="red",lty="dashed",size=1)+
-    facet_wrap(.~dataset_source,nrow=3)+labs(y="Temperature_Regression",x="Temperature_Measurement")+
+ggplot(data.pe.post[dataset_source%in%selTestId& dataset_source!="CY1_ECS"],aes(x=Delta_L_norm,y=dL_divPred))+
+    stat_density2d(aes(fill=..density..),geom="tile",contour=FALSE) +scale_fill_gradient(low="blue", high="red")+
+    # geom_point(position = "jitter",alpha=0.01,color="red")+
+    geom_line(aes(x=Delta_L_norm,y=Delta_L_norm),color="red",lty="dashed",size=1)+
+    labs(y="Illuminance difference_Regression",x="Illuminance difference_Measurement")+#facet_wrap(.~dataset_source,nrow=3)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 
@@ -289,7 +291,20 @@ ggplot(data.pe.post[dataset_source%in%selTestId],aes(x=t_out_norm))+
 
 
 # 相关性分析
-cor(data.pe.post[dataset_source=="EA1_ECS",c("t_in","t_out","resistance")],method = "spearman")
+stat.pe.post.cor<-list()
+for(j in c("lower","higher")){
+    for(i in c(selTestId)){
+        stat.pe.post.cor[[j]][[i]]<-cor(x=data.pe.post[dataset_source==i&status==j,
+                                                                              c("resistance_norm","t_out_norm","Delta_L_norm")],method = "spearman",use="na.or.complete")
+        stat.pe.post.cor[["all"]][[i]]<-cor(x=data.pe.post[dataset_source==i&!is.na(status),c("resistance_norm","t_out_norm","Delta_L_norm")],method = "spearman",use="na.or.complete")
+        
+        }
+    stat.pe.post.cor[[j]][["all"]]<-cor(x=data.pe.post[status==j&dataset_source%in%selTestId,c("resistance_norm","t_out_norm","Delta_L_norm")],method = "spearman",use="na.or.complete")
+}
+stat.pe.post.cor[["all"]][["all"]]<-cor(x=data.pe.post[dataset_source%in%selTestId&!is.na(status),c("resistance_norm","t_out_norm","Delta_L_norm")],method = "spearman",use="na.or.complete")
+
+corrplot(stat.pe.post.cor[["lower"]][["FY1_ECS"]],tl.col = "black", tl.cex = 0.8, tl.srt = 45,method="ellipse",type = "upper",tl.pos = "lt")
+corrplot(stat.pe.post.cor[["lower"]][["FY1_ECS"]],tl.col = NULL, tl.cex = 0.8,tl.pos = "n", tl.srt = 45,method="number",type = "lower",add=TRUE)
 
 
 data.pe.post<-mutate(data.pe.post,na.approx)
