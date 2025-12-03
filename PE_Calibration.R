@@ -34,4 +34,10 @@ stat.pe.cali.raw<-data.pe.cali.long[][,.(sensorId=paste(substring(test_id,15),va
                                        mean=mean(value,na.rm = TRUE),
                                        sd=sd(value,na.rm = TRUE)),by=(labelTestSensor=paste(substring(test_id,15),variable,data_label,sep="_"))]
 
+data.pe.cali.raw<-read.xlsx("传感器校正数据.xlsx",sheetName = "IF5 EF1用传感器")%>%as.data.table
+nn<-lm(data_label~lux,data.pe.cali.raw[test_id=="L_V7_BH_2"])
+summary(nn)
+
+
+
 
