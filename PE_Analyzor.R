@@ -1,4 +1,5 @@
 #### 用于分析数据的脚本 ####
+# 包括 相关性分析，拟合等
 # 读取已清洗数据
 ################################################################################
 
@@ -24,6 +25,9 @@ data.pe.post[dataset_source=="AY1_ECS"&t_out==37.60711]
 for(i in unique(data.pe.post.field$dataset_source)){
     data.pe.post.field[dataset_source==i]$msg_id<-c(1:(nrow(data.pe.post.field[dataset_source==i])))
 }
+# 切记EF1测试中，多个test_id已合并，因此会出现msg_id不连续且不单调递增的情况，需要重新赋值
+
+nn<-table(data.pe.post.field[,c("dataset_source","msg_id")])%>%as.data.table
 
 setorder(data.pe.post,dataset_source,msg_id)
 
@@ -77,8 +81,7 @@ for(i in unique(data.pe.post$dataset_source)){
     }
 }
 
-# stat.pe.scale[test_id==i]$scale_illu
-# stat.pe.scale[test_id==i]$scale_temp
+
 
 # 可视化
 boxplot(formula=resistance~dataset_source,data = data.pe.post[!dataset_source %in% c("AA1_ECS","AY1_ECS")])
@@ -149,16 +152,39 @@ for(i in unique(stat.pe.post.lcst$test_id)){
     }
 }
 
-# 反归一化
+####################################
+#### 反归一化 ####
+# group_1对应三个温度，group_2对应照度 前序号对应循环数
+# X_original = X_norm * (X_max - X_min) + X_min 0.01-0.99归一化的
+# group_1就是三个温度，group_2就是两个l，其他的都是相应的名字
+# t_out_denorm = (t_out_norm - 0.01) * (tempRange[2] - tempRange[1]) / 0.98 + tempRange[1]
+# 0-22代表的是循环数，相当于每个循环单独归一化，比如22->resistance 就是cycNo=22 电阻值的归一化参数
+"0->group_1"
 
+stat.pe.post.denorm<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_PostProcessData/scalers_min_max_info.csv",data.table = TRUE)
+stat.pe.post.denorm[,data_max:=gsub("[\\[\\]]",'',data_max,perl = TRUE)%>%as.numeric][
+    ,data_min:=gsub("[\\[\\]]",'',data_min,perl = TRUE)%>%as.numeric][
+        ,std:=gsub("[\\[\\]]",'',std,perl = TRUE)%>%as.numeric]
+
+# stat.pe.post.denorm[,lapply(.SD, function(x){x<-gsub("[\\[\\]]",'',x,perl = TRUE)}),.SDcols=c("data_min","data_max","std")] #不能赋值回去
+
+data.pe.post[,":="(t_out_divPred_denorm=as.numeric(NA),t_out_allPred_denorm=as.numeric(NA),dL_allPred=as.numeric(NA),dL_divPred=as.numeric(NA))]
+for(i in unique(data.pe.post$CycleNo)){
+    tempRange<-stat.pe.post.denorm[group_path==paste(i,"->","group_1",sep=""),c("data_min","data_max")]%>%unlist
+    illumRange<-stat.pe.post.denorm[group_path==paste(i,"->","group_2",sep=""),c("data_min","data_max")]%>%unlist
+    data.pe.post[CycleNo==i,":="(t_out_allPred_denorm=(t_out_allPred - 0.01) * (tempRange[2] - tempRange[1]) / 0.98 + tempRange[1],
+                                 t_out_divPred_denorm=(t_out_divPred - 0.01) * (tempRange[2] - tempRange[1]) / 0.98 + tempRange[1],
+                                 dL_allPred_denorm=(dL_allPred - 0.01) * (illumRange[2] - illumRange[1]) / 0.98 + illumRange[1],
+                                 dL_divPred_denorm=(dL_divPred - 0.01) * (illumRange[2] - illumRange[1]) / 0.98 + illumRange[1])]
+}
+
+####################################
 # 整体评估
 stat.pe.pred.temp.sel<-data.table(test_id=as.character(NA),count=as.numeric(NA),targetStatus=as.character(NA),
                                                      rSquare=as.numeric(NA),MAPE=as.numeric(NA),RMSE=as.numeric(NA))[-1]
 
 stat.pe.pred.temp.sel<-data.pe.post[dataset_source%in%selTestId]%>%{
-    for(i in unique(data.pe.post$dataset_source)){
-        
-    }
+   
     stat.pe.pred.temp.sel<-rbind(stat.pe.pred.temp.sel,
           data.table(test_id="allSample",count=nrow(.),targetStatus="all",
                                      rSquare=getRSquare(pred=.$t_out_allPred,ref = .$t_out_norm),
@@ -171,6 +197,18 @@ stat.pe.pred.temp.sel<-data.pe.post[dataset_source%in%selTestId]%>%{
                      MAPE=getMAPE(yPred=.$t_out_divPred,yLook = .$t_out_norm),
                      RMSE=RMSE(pred=.$t_out_divPred,obs = .$t_out_norm,na.rm = TRUE)
           )          )
+    stat.pe.pred.temp.sel<-rbind(stat.pe.pred.temp.sel,
+                                 data.table(test_id="allSample",count=nrow(.),targetStatus="all_denorm",
+                                            rSquare=getRSquare(pred=.$t_out_allPred_denorm,ref = .$t_out),
+                                            MAPE=getMAPE(yPred=.$t_out_allPred_denorm,yLook = .$t_out),
+                                            RMSE=RMSE(pred=.$t_out_allPred_denorm,obs = .$t_out,na.rm = TRUE)
+                                 )          )
+    stat.pe.pred.temp.sel<-rbind(stat.pe.pred.temp.sel,
+                                 data.table(test_id="allSample",count=nrow(.),targetStatus="div_all_denorm",
+                                            rSquare=getRSquare(pred=.$t_out_divPred_denorm,ref = .$t_out),
+                                            MAPE=getMAPE(yPred=.$t_out_divPred_denorm,yLook = .$t_out),
+                                            RMSE=RMSE(pred=.$t_out_divPred_denorm,obs = .$t_out,na.rm = TRUE)
+                                 )          )
     stat.pe.pred.temp.sel<-rbind(stat.pe.pred.temp.sel,
           data.table(test_id="allSample",count=nrow(.[status=="lower"]),targetStatus="div_lower",
                      rSquare=getRSquare(pred=.[status=="lower"]$t_out_divPred,ref = .[status=="lower"]$t_out_norm),
@@ -238,11 +276,9 @@ for(i in unique(stat.pe.post.lcst$test_id)){
 # 整体评估
 stat.pe.pred.illum.sel<-data.table(test_id=as.character(NA),count=as.numeric(NA),targetStatus=as.character(NA),
                                   rSquare=as.numeric(NA),MAPE=as.numeric(NA),RMSE=as.numeric(NA))[-1]
-
+# 需要修改加到循环里代码会好看
 stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId& dataset_source!="CY1_ECS"]%>%{
-    for(i in unique(data.pe.post$dataset_source)){
-        
-    }
+    
     stat.pe.pred.illum.sel<-rbind(stat.pe.pred.illum.sel,
                                  data.table(test_id="allSample",count=nrow(.),targetStatus="all",
                                             rSquare=getRSquare(pred=.$dL_allPred,ref = .$Delta_L_norm),
@@ -250,10 +286,22 @@ stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId& dataset_source
                                             RMSE=RMSE(pred=.$dL_allPred,obs = .$Delta_L_norm,na.rm = TRUE)
                                  )          )
     stat.pe.pred.illum.sel<-rbind(stat.pe.pred.illum.sel,
-                                 data.table(test_id="allSample",count=nrow(.),targetStatus="div_all",
-                                            rSquare=getRSquare(pred=.$dL_divPred,ref = .$Delta_L_norm),
-                                            MAPE=getMAPE(yPred=.$dL_divPred,yLook = .$Delta_L_norm),
-                                            RMSE=RMSE(pred=.$dL_divPred,obs = .$Delta_L_norm,na.rm = TRUE)
+                                  data.table(test_id="allSample",count=nrow(.),targetStatus="div_all",
+                                             rSquare=getRSquare(pred=.$dL_divPred,ref = .$Delta_L_norm),
+                                             MAPE=getMAPE(yPred=.$dL_divPred,yLook = .$Delta_L_norm),
+                                             RMSE=RMSE(pred=.$dL_divPred,obs = .$Delta_L_norm,na.rm = TRUE)
+                                  )          )
+    stat.pe.pred.illum.sel<-rbind(stat.pe.pred.illum.sel,
+                                  data.table(test_id="allSample",count=nrow(.),targetStatus="all_denorm",
+                                             rSquare=getRSquare(pred=.$dL_allPred_denorm,ref = .$Delta_L),
+                                             MAPE=getMAPE(yPred=.$dL_allPred_denorm,yLook = .$Delta_L),
+                                             RMSE=RMSE(pred=.$dL_allPred_denorm,obs = .$Delta_L,na.rm = TRUE)
+                                  )          )
+    stat.pe.pred.illum.sel<-rbind(stat.pe.pred.illum.sel,
+                                 data.table(test_id="allSample",count=nrow(.),targetStatus="div_all_denorm",
+                                            rSquare=getRSquare(pred=.$dL_divPred_denorm,ref = .$Delta_L),
+                                            MAPE=getMAPE(yPred=.$dL_divPred_denorm,yLook = .$Delta_L),
+                                            RMSE=RMSE(pred=.$dL_divPred_denorm,obs = .$Delta_L,na.rm = TRUE)
                                  )          )
     stat.pe.pred.illum.sel<-rbind(stat.pe.pred.illum.sel,
                                  data.table(test_id="allSample",count=nrow(.[status=="lower"]),targetStatus="div_lower",
@@ -270,7 +318,10 @@ stat.pe.pred.illum.sel<-data.pe.post[dataset_source%in%selTestId& dataset_source
     stat.pe.pred.illum.sel
 }
 
-ggplot(data.pe.post[dataset_source%in% selTestId & dataset_source!="CY1_ECS"],aes(x=msg_id))+geom_point(aes(x=msg_id,y=l_out_norm,color="origin"))+geom_point(aes(x=msg_id,y=l_in_norm,color="allPred",lty="dash"))+geom_point(aes(x=msg_id,y=resistance_norm,color="resistance",lty="dash"))+
+
+ggplot(data.pe.post[dataset_source%in% selTestId & dataset_source!="CY1_ECS"],aes(x=msg_id))+
+    geom_point(aes(x=msg_id,y=l_out_norm,color="origin"))+geom_point(aes(x=msg_id,y=l_in_norm,color="allPred",lty="dash"))+
+    geom_point(aes(x=msg_id,y=resistance_norm,color="resistance",lty="dash"))+
     geom_line(aes(x=msg_id,y=t_out_allPred,color="allPred",lty="dash"))+geom_line(aes(x=msg_id,y=predL,color="divPred",lty="dash"))+facet_wrap(.~dataset_source)
 
 ggplot(data.pe.post[dataset_source%in% selTestId& dataset_source!="CY1_ECS"])+
