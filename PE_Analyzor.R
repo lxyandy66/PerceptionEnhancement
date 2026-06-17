@@ -178,8 +178,16 @@ for(i in unique(data.pe.post$CycleNo)){
                                  dL_divPred_denorm=(dL_divPred - 0.01) * (illumRange[2] - illumRange[1]) / 0.98 + illumRange[1])]
 }
 
+
+nn<-data.pe.post[,c("CycleNo","l_out","l_out_norm")]
+nn$l_out_denorm<-as.numeric(NA)
+for(i in unique(nn$CycleNo)){
+    illumRange<-stat.pe.post.denorm[group_path==paste(i,"->","group_2",sep=""),c("data_min","data_max")]%>%unlist
+    nn[CycleNo==i,":="(l_out_denorm=(l_out_norm - 0.01) * (illumRange[2] - illumRange[1]) / 0.98 + illumRange[1])]
+}
+
 ####################################
-# 整体评估
+#### 温度拟合整体评估 ####
 stat.pe.pred.temp.sel<-data.table(test_id=as.character(NA),count=as.numeric(NA),targetStatus=as.character(NA),
                                                      rSquare=as.numeric(NA),MAPE=as.numeric(NA),RMSE=as.numeric(NA))[-1]
 
@@ -231,8 +239,10 @@ stat.pe.pred.temp.sel<-data.pe.post[dataset_source%in%selTestId]%>%{
 ggplot(data.pe.post[dataset_source%in% selTestId],aes(x=msg_id))+geom_point(aes(x=msg_id,y=l_out_norm,color="origin"))+geom_point(aes(x=msg_id,y=l_in_norm,color="allPred",lty="dash"))+geom_point(aes(x=msg_id,y=resistance_norm,color="resistance",lty="dash"))+
     geom_line(aes(x=msg_id,y=t_out_allPred,color="allPred",lty="dash"))+geom_line(aes(x=msg_id,y=predL,color="divPred",lty="dash"))+facet_wrap(.~dataset_source)
 
-ggplot(data.pe.post[dataset_source%in% selTestId])+
-    geom_line(aes(x=msg_id,y=t_out_norm,color="Measurement"),lty="solid",size=1)+geom_line(aes(x=msg_id,y=t_out_divPred,color="Regression"),lty="dashed",size=0.75)+
+ggplot(data.pe.post.field[])+#dataset_source%in% selTestId
+    geom_line(aes(x=msg_id,y=t_out_norm,color="t_out_norm"),lty="solid",size=1)+
+    geom_line(aes(x=msg_id,y=resistance_norm,color="resistance_norm"),lty="dashed",size=0.75)+
+    geom_line(aes(x=msg_id,y=Rate_L_norm,color="rate_l_norm"),lty="dashed",size=0.75)+
     facet_wrap(.~dataset_source,nrow=3)+labs(y="Temperature",x="Time (s)")+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
@@ -246,7 +256,6 @@ ggplot(data.pe.post[dataset_source%in%selTestId],aes(x=t_out_norm))+
 
 
 ####################################
-
 #### 批量电阻~照度拟合 ####
 data.pe.post[,":="(dL_divPred=as.numeric(NA),dL_allPred=as.numeric(NA))]
 
@@ -273,7 +282,7 @@ for(i in unique(stat.pe.post.lcst$test_id)){
     }
 }
 
-# 整体评估
+#### 照度拟合整体评估 ####
 stat.pe.pred.illum.sel<-data.table(test_id=as.character(NA),count=as.numeric(NA),targetStatus=as.character(NA),
                                   rSquare=as.numeric(NA),MAPE=as.numeric(NA),RMSE=as.numeric(NA))[-1]
 # 需要修改加到循环里代码会好看
@@ -341,7 +350,7 @@ ggplot(data.pe.post[dataset_source%in%selTestId& dataset_source!="CY1_ECS"],aes(
 
 
 
-# 相关性分析
+#### 相关性分析 ####
 stat.pe.post.cor<-list()
 for(j in c("lower","higher")){
     for(i in c(selTestId)){

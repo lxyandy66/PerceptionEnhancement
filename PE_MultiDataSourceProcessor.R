@@ -24,7 +24,7 @@ data.pe.raw.test[,':='(A0=extractFromList(msgJson,nameFromJson[1]),
 
 #### 用于处理电化学工作站数据的脚本 ####
 # 数据读取
-data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_ExportData/251112_CY1_ECM_1.csv",
+data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_ExportData/260605_PR3_ECS_1.xlsx",
                        data.table = TRUE,skip=3,sep=",",col.names = c("time","voltage","current","reverseI","charge","vRange","iRange"))
 # 这个charge以后可以用
 data.pe.ecs.raw[,resistance:=voltage/current]
@@ -33,7 +33,7 @@ data.pe.ecs.raw[,resistance:=voltage/current]
 
 #### 用于处理气象站数据的脚本 ####
 # 原数据为分钟级别数据
-data.pe.weather.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/251024-251026_CityU_WeatherStation.csv",
+data.pe.weather.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/251030-251101_CityU_WeatherStation.csv",
                        data.table = TRUE,skip=5,col.names = c("time","t_env","hum","wind","rad"))
 data.pe.weather.raw[,time:=mdy_hm(time,tz="PRC")]
 
