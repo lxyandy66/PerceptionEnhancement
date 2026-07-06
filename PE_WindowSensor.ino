@@ -19,12 +19,12 @@
 
 /**** 电路定义 ****/
 // 测量引脚
-#define PIN_MEASUREMENT_ITO A1
+#define PIN_MEASUREMENT_ITO A0
 #define PIN_MEASUREMENT_AgNW A2
 #define PIN_MEASUREMENT_PTIN A3
 #define PIN_MEASUREMENT_PTOUT A4
 // 热电偶相关引脚
-#define PIN_SPI_CLK D2
+#define PIN_SPI_CLK A1
 #define PIN_SPI_SO D10
 #define PIN_CS_TIN D6
 #define PIN_CS_TOUT D9
@@ -41,8 +41,9 @@
 /**** 采样定义 ****/
 #define ANALOG_RESOLUTION 16         // 模拟测量的分辨位数
 #define ANALOG_RESOLUTION_MAX 65535  // 模拟测量分辨率的最大值
-#define TIME_STARTUP 100             // 使能后至采样的等待时间
-#define SAMPLING_INTERVAL 1000
+#define TIME_STARTUP 200             // 使能后至采样的等待时间
+#define SAMPLING_INTERVAL 1000       // 采样间隔 单位 毫秒
+#define HEATING_INTERVAL  1800       // 加热-冷却 每阶段时间 单位 秒 水凝胶1200
 // 电阻测量使能定义
 #define SWITCH_ENABLE HIGH    // 高电平使能
 #define SWITCH_DISABLE LOW  // 高电平使能
@@ -75,11 +76,13 @@ PackedVEML7700 slIn("PT_in", VNAME_L_IN, (new Adafruit_VEML7700()));
 PackedVEML7700 slOut("PT_out", VNAME_L_OUT, (new Adafruit_VEML7700()));  // 封装测试可用
 
 long loopCount = 0;  // 循环计数用
+long heatingCount = 0;  //加热计数用
 
 String jsonOutString = "";
 
 Chrono sampleChrono;
 boolean isHeating = true;
+
 
 void setup() {
   Serial.begin(115200);
@@ -108,7 +111,6 @@ void setup() {
   ctrlAccContainer.push_back(&tcOut);
   ctrlAccContainer.push_back(&tcEnv);
   ctrlAccContainer.push_back(&srITO);
-  // ctrlAccContainer.push_back(&srAgNW);
   ctrlAccContainer.push_back(&slIn);
   ctrlAccContainer.push_back(&slOut);
 
@@ -129,14 +131,22 @@ void loop() {
     delay(TIME_STARTUP);
     // 读取部分
     for (int i = 0; i < ctrlAccContainer.size();i++){
+      // Serial.println(ctrlAccContainer[i]->getAcId());
       ctrlAccContainer[i]->outputStatus(&jsonDoc, true, true);
-      delay(50);
+      delay(10);
     }
     digitalWrite(PIN_ENABLE_MEASUREMENT, SWITCH_DISABLE);
     /**** 使能读取结束 ****/
 
     // 辅助信息输入
-    jsonDoc["HEAT"] = 1;
+    if(heatingCount>HEATING_INTERVAL){
+      isHeating = !isHeating;
+      digitalWrite(PIN_ENABLE_HEATING, isHeating);
+      heatingCount = 0;
+    }else{
+      heatingCount++;
+    }
+    jsonDoc["HEAT"] = isHeating?1:0; //规范化JSON的Heating数值
 
     /**** 打包输出 ****/
     serializeJson(jsonDoc, jsonOutString);

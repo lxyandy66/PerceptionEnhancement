@@ -20,8 +20,10 @@ data.pe.raw[,msg_content:=gsub('""','"',msg_content)]
 
 data.pe.raw[,msg_content:=gsub('null','-999',msg_content)] #处理热电偶可能出现的NULL导致无法识别
 
+ggplot(data.pe.raw.test,aes(x=rec_time,y=reqId,color=test_id))+geom_point()
+
 #建立id
-setorder(data.pe.raw,rec_time,msg_id)
+setorder(data.pe.raw,rec_time)
 # data.pe.raw<-data.pe.raw[6:nrow(data.pe.raw)][test_id=="251024_IF1_5"]
 
 
@@ -41,8 +43,6 @@ data.pe.raw.test$msgJson<-lapply(data.pe.raw.test$msg_content,FUN = jsonToListPr
 
 nameFromJson<-c( "rq","T_IN","T_OUT","R_ITO" )#c("id","rq","dt","temp_in") "rq","T_IN","T_OUT","R_ITO","R_AgNW","L_IN" "t_in","t_out"
 data.pe.raw.test[,':='(reqId=extractFromList(msgJson,"rq"),
-                   # odt=extractFromList(msgJson,"dt"),
-                   # temp_in=extractFromList(msgJson,"temp_in"),
                    t_in=extractFromList(msgJson,"T_IN"),#t_in
                    t_out=extractFromList(msgJson,"T_OUT"),#t_out
                    # t_env=extractFromList(msgJson,"T_ENV"),
@@ -69,12 +69,17 @@ data.pe.raw.test[t_in>50,t_in:=NA]
 data.pe.raw.test[t_in>55|t_in<15]%>%View #超上下限
 data.pe.raw.test[t_in>55|t_in<15,t_in:=NA] #几个可能为异常的t_in：29.75
 data.pe.raw.test[t_in==29.75]%>%View
-data.pe.raw.test[t_out>60|t_out<18]%>%View #超上下限
-data.pe.raw.test[t_out>60|t_out<18,t_out:=NA] 
+data.pe.raw.test[t_out>50|t_out<18]%>%View #超上下限
+data.pe.raw.test[t_out>50|t_out<18,t_out:=NA] 
+data.pe.raw.test[abs(t_in-t_out)>10]%>%View
 
 data.pe.raw.test[t_in>50&t_out<30]
 data.pe.raw.test[t_in>50&t_out<30,t_in:=NA] #删除热电偶异常数据，t_out温度未上升时t_in温度应不高，即两侧温差不会太高
 # data.pe.raw.test[t_in<20,t_in:=NA] #删除热电偶异常数据 #真有可能小于20
+
+ggplot(data.pe.raw.test[l_in<1000|l_out<1000,c("rec_time","id","t_out","t_in","r_ITO","l_in","l_out")]%>%.[,":="(r_ITO=r_ITO/1000,l_in=l_in/1000,l_out=l_out/1000)]%>%
+           melt(.,id.var=c("rec_time","id")),aes(x=rec_time,y=value,color=variable))+geom_point(size=0.5)
+
 
 # 电阻异常值去除
 boxplot(data.pe.raw.test[resistance<10000]$resistance)
@@ -148,15 +153,22 @@ nrow(data.pe.raw.test[labelTimeMsgid%in%data.temp2.ef.norm$labelTimeMsgid]) #检
 
 
 data.temp2.ef.raw<-fread("EF1_Raw_Processed_noSort.csv",data.table = TRUE)
-ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","resistance","V1")]%>%#"t_in","t_out","t_env",
+
+
+
+###### 临时修改 ######
+# 处理清洗掉数据中缺失25-10-31 10:30-13:00部分
+
+
+ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","resistance")]%>%#"t_in","t_out","t_env",
            #.[,r_nor:=scale(resistance)]%>%
            # .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*40000,10,onlyPast = FALSE))]%>% .[,c("rec_time","r_ITO_est","t_mid","id")]
            .[,":="(#t_in=(t_in)*5E1,
                t_out=(t_out)*5E3,
                #t_env=(t_env)*5E1,
-               l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_out","l_in","l_out","msg_id","V1")]%>%#"t_in",,"t_env"
-           melt(.,id.var=c("msg_id","rec_time","V1")),
-       aes(x=V1,y=value,color=variable,lty=variable,group=variable))+geom_line()+
+               l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_out","l_in","l_out","msg_id")]%>%#"t_in",,"t_env"
+           melt(.,id.var=c("msg_id","rec_time")),
+       aes(x=rec_time,y=value,color=variable,lty=variable,group=variable))+geom_line()+
     labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./5E1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
@@ -169,35 +181,91 @@ ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","r
 # 对于原始数据：先平滑，再计算（如rate），再合并分钟，再平滑
 
 #### 实测数据处理 ####
-data.pe.energysim.field.raw<-data.pe.raw.test[,c("rec_time","log_id","msg_id","reqId","t_in","t_out","l_in","l_out")]
+data.pe.energysim.field.raw<-data.pe.raw.test[,c("rec_time","log_id","msg_id","reqId","t_in","t_out","l_in","l_out","r_ITO")]
+# 秒级数据有重复，共 118853条数据，但仅有118666个秒数据
+colName<-c("log_id","msg_id","reqId","t_in","t_out","l_in","l_out","r_ITO")
+data.pe.energysim.field.raw<-data.pe.energysim.field.raw[,(colName=lapply(.SD,mean,na.rm=TRUE)),by=rec_time,.SDcols=colName]#这样可以实现但是似乎logid保留不了第一个
+# 将所有NaN处理为NA
+for(i in names(data.pe.energysim.field.raw)){
+    data.pe.energysim.field.raw[which(is.nan(as.matrix(data.pe.energysim.field.raw[,..i]))) ,i] <- NA
+    #很奇怪，理论来说应该是..i, 但是这里..i会提示找不到对象，直接i才行，提示是赋值时候出错
+}
+# 秒级序列构建 共120327条！！！非常重要，需要对EnergyPlus提供完整的时间表
+data.pe.energysim.field.raw<-merge(x=data.table(rec_time=seq.POSIXt(from=min(data.pe.energysim.field.raw$rec_time),
+                                                                    to = max(data.pe.energysim.field.raw$rec_time),by = "sec")),
+                                   y=data.pe.energysim.field.raw,all.x = TRUE,by="rec_time")
 
-colName<-c("t_in","t_out","l_in","l_out","Rate_L")#,"Rate_L","Rate_L_norm"  ,"Rate_L_cal" #批量处理的内容
-
-ggplot(data.pe.energysim.field.min,aes(x=datetime,y=t_out))+geom_point(size=0.1)+geom_point(aes(y=t_out_smt,color="t_out"),size=0.1)
-ggplot(data.pe.energysim.field.min[],aes(x=datetime,y=Rate_L_cal_smt))+geom_line()
 # 秒级数据平滑
+colName<-c("t_in","t_out","l_in","l_out","r_ITO")#,"Rate_L","Rate_L_norm"  ,"Rate_L_cal" #批量处理的内容
 data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,getMovingAverageValue,onlyPast=FALSE,n=20),
                             .SDcols=colName]
 data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,as.numeric),.SDcols=paste0(colName,"_smt")]
-data.pe.energysim.field.raw[,Rate_L_cal:=(l_in_smt/l_out_smt)]
+data.pe.energysim.field.raw[,Rate_L_cal:=(l_in_smt/l_out_smt)][Rate_L_cal>1,Rate_L_cal:=1][l_in<1000|l_out<1000,Rate_L_cal:=1]
+
+# 秒级平滑缺失的数据，用已有的补上
+for(i in colName){
+    #这个管用 data.table原生的处理方式
+    data.pe.energysim.field.raw[!complete.cases(data.pe.energysim.field.raw[,paste0(..i,"_smt")]),
+                                paste0(i,"_smt"):=apply(.SD,MARGIN = 1,function(x){ return(ifelse(is.na(x[2]),x[1],x[2]))  }),.SDcols=paste0(i,c("","_smt"))]
+}
+data.pe.energysim.field.raw[,Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1][l_in_smt<2000|l_out_smt<2000,Rate_L:=1][,Rate_L:=as.numeric(getMovingAverageValue(Rate_L,onlyPast=FALSE,n=20))]
+data.pe.energysim.field.raw[is.na(Rate_L),Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1]
+
+data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,na.approx,na.rm=FALSE),.SDcols=paste0(colName,"_smt")]
+
+data.pe.energysim.field.raw[is.na(t_out_smt),t_out_smt:=t_in_smt]
+
+
+data.pe.energysim.field.raw<-fread("EF_Full.csv",data.table = TRUE)%>%.[,rec_time:=as.POSIXct(rec_time)] #读入收工修改的数据
+
+write.csv(data.pe.energysim.field.raw[rec_time>=as.POSIXct("2025-10-30 11:00:00"),
+                                      c("rec_time","msg_id","t_in_smt","t_out_smt","l_in_smt","l_out_smt","r_ITO_smt","Rate_L")],file="EF_Full.csv",na = "",row.names = FALSE)
+
+ggplot(data.pe.energysim.field.raw[rec_time>as.POSIXct("2025-10-30 11:00:00"),c("rec_time",paste0(..colName,"_smt"),"Rate_L")]%>% #,"Rate_L","t_glass"
+           # .[,":="(l_in=l_in/1000,l_out=l_out/1000,r_ITO=r_ITO/200)]%>%#,Rate_L_cal=Rate_L_cal*50
+           .[,":="(Rate_L=Rate_L*50,l_in_smt=l_in_smt/1000,l_out_smt=l_out_smt/1000,r_ITO_smt=r_ITO_smt/200)]%>%
+           melt(.,id.var=c("rec_time")),#Rate_L=Rate_L*50,
+       aes(x=rec_time,y=value,color=variable))+geom_point()#size=0.1
+
+
 # 分钟级数据合并处理
-data.pe.energysim.field.min<-data.pe.energysim.field.raw[,.(count=length(t_in_smt),
+data.pe.energysim.field.min<-data.pe.energysim.field.raw[,.(rec_time=as.POSIXct(format(as.POSIXct(rec_time[1]),format="%Y-%m-%d %H:%M")),
+                                                            count=length(t_in_smt),
                                                             t_in=mean(t_in_smt,na.rm=TRUE),
                                                             t_out=mean(t_out_smt,na.rm=TRUE),
                                                             l_in=mean(l_in_smt,na.rm=TRUE),
                                                             l_out=mean(l_out_smt,na.rm=TRUE),
-                                                            Rate_L_cal=mean(Rate_L_cal,na.rm=TRUE)),
+                                                            r_ITO=mean(r_ITO_smt,na.rm=TRUE)),
                                                          by=(labelDatetime=format(as.POSIXct(rec_time),format="%Y-%m-%d %H:%M"))]
 data.pe.energysim.field.min[,id:=c(1:nrow(data.pe.energysim.field.min))]
 data.pe.energysim.field.min[,paste0(colName,"_smt"):=lapply(.SD,getMovingAverageValue,onlyPast=FALSE,n=10),
                             .SDcols=colName]
 data.pe.energysim.field.min[,paste0(colName,"_smt"):=lapply(.SD,as.numeric),.SDcols=paste0(colName,"_smt")]
-data.pe.energysim.field.min[Rate_L_cal_smt>1,Rate_L_cal_smt:=1]
 
-data.pe.energysim.field.min[,datetime:=as.POSIXct(labelDatetime)] #临时加一个时间戳绘图用
-####Rate L处理####
-data.pe.energysim.field.min[l_in<10|l_out<10,Rate_L_cal_smt:=1]
-range(data.pe.energysim.field.min$Rate_L_cal,na.rm = TRUE)
+# 温度处理
+data.pe.energysim.field.min[,t_glass:=ifelse(is.na(t_out_smt),t_in_smt,t_out_smt)][,t_glass:=as.numeric(getMovingAverageValue(t_glass,onlyPast=FALSE,n=10))]
+colName<-c("t_in_smt","t_out_smt","l_in_smt","l_out_smt","r_ITO_smt","t_glass")
+data.pe.energysim.field.min[,paste0(colName):=lapply(.SD,na.approx,na.rm = FALSE),.SDcols=paste0(colName)]
+
+# Rate L处理
+data.pe.energysim.field.min[,Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1][l_in_smt<2000|l_out_smt<2000,Rate_L:=1] #1000合适，2500有点多
+
+
+#### 直接分钟级数据 ####
+data.pe.energysim.output<-merge(x=data.pe.energysim.field.min[,c("labelDatetime","rec_time","t_in_smt","t_out_smt","l_in_smt","l_out_smt","r_ITO_smt","Rate_L","t_glass")],
+                                y=data.pe.weather.raw,by.x = "labelDatetime",by.y = "labelDatetime",all.x = TRUE)
+data.pe.energysim.output[,Rate_L_norm_cmb:=normalize(Rate_L)]
+names(data.pe.energysim.output)<-c("labelDatetime","rec_time","t_in","t_out","l_in","l_out","r_ITO","Rate_L","t_glass","time",
+                                   "t_env","hum","wind","rad","Rate_L_norm_cmb")
+
+write.csv(data.pe.energysim.output.scaled[,c("labelDatetime","t_glass","r_ITO","l_in","l_out","Rate_L","Rate_L_norm_cmb","t_env","hum",
+                                      "wind","rad" )],file = "PE_HIPSimulation_update.csv")
+
+data.pe.energysim.output.scaled<-data.pe.energysim.output
+
+data.pe.energysim.output.scaled[Rate_L<0.4]$Rate_L<-0.4
+data.pe.energysim.output.scaled$Rate_L_norm_cmb<-normalize(data.pe.energysim.output.scaled$Rate_L)
+
 
 # 看看TransferLearning那块怎么处理的
 ggplot(data.temp2.ef.raw)+geom_point(aes(x=l_in,y=l_in_norm,color="l_in"))+geom_point(aes(x=l_out,y=l_out_norm,color="l_out"))
@@ -205,7 +273,7 @@ ggplot(data.temp2.ef.raw)+geom_point(aes(x=l_in,y=l_in_norm,color="l_in"))+geom_
 range(data.temp2.ef.raw$Rate_L_norm) #0.4087741 1.0000000
 
 
-#### 处理Transfer Learning所用数据 ####
+#### 处理Transfer Learning所用数据 #### #!作废，不按此方法处理，直接用field数据重新预测试试!#
 data.pe.energysim.transfer.raw<-data.temp2.ef.raw[,c("rec_time","msg_id","t_in","t_out","l_in","l_out","Rate_L","Rate_L_norm")] #取Rate_L_norm数据，用于乘以透射率的系数
 data.pe.energysim.transfer.raw[,labelDatetime:=substr(rec_time,1,16)]#
 
@@ -271,11 +339,31 @@ data.pe.energysim.output[rec_time>as.POSIXct("2025-10-31 10:30")&rec_time<as.POS
 data.pe.energysim.output[,paste0(colName,"_cmb"):=lapply(.SD,na.approx),.SDcols=paste0(colName,"_cmb")] #cmb == combine
 data.pe.energysim.output[is.na(dataType),dataType:=3] # 给插值内容的dataType设为3
 
-ggplot(data.pe.energysim.output)+
-    geom_point(aes(x=rec_time,y=l_out_cmb,color="l_out_cmb",shape=as.factor(dataType)),size=1)+
-    geom_point(aes(x=rec_time,y=l_in_cmb,color="l_in_cmb",shape=as.factor(dataType)),size=1)
+data.pe.energysim.output[,Rate_L_norm_cmb:=normalize(Rate_L_cmb)]
+# 合并气象站数据
+data.pe.energysim.output<-merge(x=data.pe.energysim.output,y=data.pe.weather.raw,by.x = "labelDatetime",by.y = "labelDatetime",all.x = TRUE)
 
-write.csv(data.pe.energysim.output[,c("labelDatetime","dataType","t_in_cmb","t_out_cmb","l_in_cmb","l_out_cmb","Rate_L_cmb")],file = "PE_HIPSimulation.csv")
+ggplot(data.pe.energysim.output.scaled[,c("rec_time","t_env","rad","Rate_L_norm_cmb")][,":="(rad=rad/30,Rate_L_norm_cmb=Rate_L_norm_cmb*30)]%>%melt(.,id.var="rec_time"),aes(x=rec_time,y=value,color=variable))+geom_line()
+ggplot(data.pe.energysim.output)+
+    geom_point(aes(x=rec_time,y=t_out_cmb,color="t_out_cmb",shape=as.factor(dataType)),size=1)+
+    geom_point(aes(x=rec_time,y=t_in_cmb,color="t_in_cmb",shape=as.factor(dataType)),size=1)
+
+
+
+write.csv(data.pe.energysim.output[,c("labelDatetime","t_in_cmb","t_out_cmb","l_in_cmb","l_out_cmb","Rate_L_cmb","Rate_L_norm_cmb","t_env","hum",
+                                      "wind","rad" )],file = "PE_HIPSimulation.csv",row.names = FALSE,na = "")
+# 列名对应
+# labelDatetime-时间戳
+# t_in_cmb-玻璃内表面温度
+# t_out_cmb-玻璃外表面温度
+# l_in_cmb-玻璃内表面照度
+# l_out_cmb-玻璃外表面照度
+# Rate_L_cmb-玻璃内外照度差
+# Rate_L_norm_cmb-标准化的玻璃内外照度差
+# t_env-室外温度
+# hum-室外湿度
+# wind-室外风速
+# rad-室外辐射强度
 
 #### Energyplus数据准备结束 ####
 ################################################################################
