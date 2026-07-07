@@ -37,14 +37,14 @@ data.pe.weather.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/251030
                        data.table = TRUE,skip=5,col.names = c("time","t_env","hum","wind","rad"))
 data.pe.weather.raw[,time:=mdy_hm(time,tz="PRC")][,labelDatetime:=format(time,format="%Y-%m-%d %H:%M")]
 
-data.pe.weather.sec<-data.table(datetime=seq.POSIXt(from = as.POSIXct("2025-10-24 00:00:00"), to = as.POSIXct("2025-10-25 23:59:59"), by = "sec"))
+data.pe.weather.sec<-data.table(datetime=seq.POSIXt(from = as.POSIXct("2025-10-30 00:00:00"), to = as.POSIXct("2025-11-01 23:59:59"), by = "sec"))
 
 # 按照时间合并数据，分钟内的数据插值补充
 data.pe.weather.sec<-merge(x=data.pe.weather.sec,y=data.pe.weather.raw[,isApprox:=FALSE],all.x = TRUE,by.x = "datetime",by.y="time")
 data.pe.weather.sec[is.na(isApprox)]$isApprox<-TRUE
 
-data.pe.weather.sec[1:172741,c("t_env","hum","wind","rad")]<-#时间应对应，全时间段除去最后1min数据，此处为172741
-    data.pe.weather.sec[,lapply(.SD,na.approx),.SDcols=c("t_env","hum","wind","rad")]
+data.pe.weather.sec[,c("t_env","hum","wind","rad")]<-#时间应对应，全时间段除去最后1min数据，此处为172741
+    data.pe.weather.sec[,lapply(.SD,na.approx,na.rm=FALSE),.SDcols=c("t_env","hum","wind","rad")]
 ggplot(data.pe.weather.raw%>%melt(.,id.var=c("time","labelDatetime")),aes(x=time,y=value,color=variable))+geom_line()
 
 ################################################################################

@@ -153,14 +153,16 @@ nrow(data.pe.raw.test[labelTimeMsgid%in%data.temp2.ef.norm$labelTimeMsgid]) #检
 
 
 data.temp2.ef.raw<-fread("EF1_Raw_Processed_noSort.csv",data.table = TRUE)
+nn1<-cbind(data.temp2.ef.raw[,c("rec_time","Rate_L_norm")],data.temp2.ef.norm[,"Rate_L"])
+ggplot(nn1%>%melt(.,id.var="rec_time"),aes(x=rec_time,y=value,color=variable))+geom_point()
 
-
+# 大天才 Raw里面的norm 和Norm里面的Norm 完全不一样 服了
 
 ###### 临时修改 ######
 # 处理清洗掉数据中缺失25-10-31 10:30-13:00部分
 
 
-ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","resistance")]%>%#"t_in","t_out","t_env",
+ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","resistance")]%>%#"t_in","t_out","t_env",rec_time<as.POSIXct("2025-10-30 12:00")
            #.[,r_nor:=scale(resistance)]%>%
            # .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*40000,10,onlyPast = FALSE))]%>% .[,c("rec_time","r_ITO_est","t_mid","id")]
            .[,":="(#t_in=(t_in)*5E1,
@@ -202,6 +204,7 @@ data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,getMovingAverage
 data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,as.numeric),.SDcols=paste0(colName,"_smt")]
 data.pe.energysim.field.raw[,Rate_L_cal:=(l_in_smt/l_out_smt)][Rate_L_cal>1,Rate_L_cal:=1][l_in<1000|l_out<1000,Rate_L_cal:=1]
 
+
 # 秒级平滑缺失的数据，用已有的补上
 for(i in colName){
     #这个管用 data.table原生的处理方式
@@ -211,15 +214,23 @@ for(i in colName){
 data.pe.energysim.field.raw[,Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1][l_in_smt<2000|l_out_smt<2000,Rate_L:=1][,Rate_L:=as.numeric(getMovingAverageValue(Rate_L,onlyPast=FALSE,n=20))]
 data.pe.energysim.field.raw[is.na(Rate_L),Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1]
 
-data.pe.energysim.field.raw[,paste0(colName,"_smt"):=lapply(.SD,na.approx,na.rm=FALSE),.SDcols=paste0(colName,"_smt")]
+
+data.pe.energysim.field.raw[rec_time>=as.POSIXct("2025-10-30 11:00:00")][
+                                !complete.cases(data.pe.energysim.field.raw[rec_time>=as.POSIXct("2025-10-30 11:00:00")])]%>%View
+
+data.pe.energysim.field.raw[,c("msg_id",paste0(colName,"_smt")):=lapply(.SD,na.approx,na.rm=FALSE),.SDcols=c("msg_id",paste0(colName,"_smt"))]
 
 data.pe.energysim.field.raw[is.na(t_out_smt),t_out_smt:=t_in_smt]
 
 
 data.pe.energysim.field.raw<-fread("EF_Full.csv",data.table = TRUE)%>%.[,rec_time:=as.POSIXct(rec_time)] #读入收工修改的数据
 
+data.pe.energysim.field.raw<-merge(x=data.pe.energysim.field.raw,y=data.pe.weather.sec[,c("datetime","t_env")],by.x = "rec_time",by.y="datetime",all.x=TRUE,sort = FALSE)
+
+# 数据输出
+# 新处理的数据输出
 write.csv(data.pe.energysim.field.raw[rec_time>=as.POSIXct("2025-10-30 11:00:00"),
-                                      c("rec_time","msg_id","t_in_smt","t_out_smt","l_in_smt","l_out_smt","r_ITO_smt","Rate_L")],file="EF_Full.csv",na = "",row.names = FALSE)
+                                      c("rec_time","msg_id","t_in_smt","t_out_smt","t_env","l_in_smt","l_out_smt","r_ITO_smt","Rate_L")],file="EF_Full.csv",na = "",row.names = FALSE)
 
 ggplot(data.pe.energysim.field.raw[rec_time>as.POSIXct("2025-10-30 11:00:00"),c("rec_time",paste0(..colName,"_smt"),"Rate_L")]%>% #,"Rate_L","t_glass"
            # .[,":="(l_in=l_in/1000,l_out=l_out/1000,r_ITO=r_ITO/200)]%>%#,Rate_L_cal=Rate_L_cal*50
@@ -227,8 +238,55 @@ ggplot(data.pe.energysim.field.raw[rec_time>as.POSIXct("2025-10-30 11:00:00"),c(
            melt(.,id.var=c("rec_time")),#Rate_L=Rate_L*50,
        aes(x=rec_time,y=value,color=variable))+geom_point()#size=0.1
 
+#### 检查新处理的数据 ####
+# 旧处理的数据和新处理的数据差的挺大的
 
-# 分钟级数据合并处理
+# 思路
+# 原始处理数据 - python脚本处理 新数据重新倒回，只取旧处理数据的缺失值 拼接处平滑
+data.pe.post.new<-fread("EF_Full_processed.csv",data.table = TRUE)%>%.[,":="(rec_time=as.POSIXct(rec_time),type="new")]
+# nn<-data.temp2.ef.raw[,c("rec_time","t_out_norm","t_out", "t_env_norm","t_env","Rate_L_norm","Rate_L","resistance_norm","resistance")] # Raw的归一化数据不对，似乎不是最新的
+nn<-data.temp2.ef.norm[,c("rec_time","t_out","t_env","Rate_L","resistance")]
+data.pe.post.combined<-rbind(data.pe.post.new[,c("rec_time","t_out","t_out_raw","t_env","t_env_raw","Rate_L","Rate_L_raw","resistance","resistance_raw")],nn)
+# 用来合并的
+names(nn)<-c("rec_time","t_out_old","t_env_old","Rate_L_old","resistance_old")
+data.pe.post.combined.wide<-merge(x=data.pe.post.new[,c("rec_time","t_out","t_out_raw","t_env","t_env_raw","Rate_L","Rate_L_raw","resistance","resistance_raw")],
+                                  y=nn,by.x="rec_time",by.y="rec_time",sort = FALSE,all = TRUE)
+
+#####????????
+
+# 仅把部分时间段的旧数据用新数据替换
+colName<-c("t_out","t_env","Rate_L","resistance")
+# 手动处理部分数据
+data.pe.post.combined.wide[(rec_time>as.POSIXct("2025-10-30 17:05:00")&rec_time<as.POSIXct("2025-10-30 18:43:00"))|
+                               (rec_time>as.POSIXct("2025-10-31 07:57:00")&rec_time<as.POSIXct("2025-10-31 13:07:51")),
+                                                             paste0(colName,"_old"):=lapply(.SD,as.numeric),.SDcol=colName]
+data.pe.post.combined.wide[(rec_time>as.POSIXct("2025-10-30 13:00:00")&rec_time<as.POSIXct("2025-10-30 15:00:00")&resistance_old<0.25)|
+                               (rec_time<as.POSIXct("2025-10-30 12:00:00")&t_env_old>0.25),
+                                                         paste0(colName,"_old"):=lapply(.SD,function(x){return(NA)}),.SDcol=colName]
+ #(rec_time>as.POSIXct("2025-10-30 18:00:00")&rec_time<as.POSIXct("2025-10-30 20:00:00")&t_env_old<0.28)
+data.pe.post.combined.wide[,paste0(colName,"_old"):=lapply(.SD,na.approx,na.rm=FALSE,rule = 2),.SDcol=paste0(colName,"_old")]
+
+# 旧处理的数据和新处理的数据差的挺大的
+ggplot(data.pe.post.combined.wide[rec_time>as.POSIXct("2025-10-30 11:00:00"),c("rec_time","t_out_old","t_env_old","Rate_L_old","resistance_old")]%>% #,"Rate_L","t_glass" [,c("rec_time","t_env","resistance","t_out","Rate_L","isHeating")]
+                             # .[,":="(l_in=l_in/1000,l_out=l_out/1000,r_ITO=r_ITO/200)]%>%#,Rate_L_cal=Rate_L_cal*50
+                             # .[,":="(Rate_L=Rate_L*50,l_in_smt=l_in/1000,l_out=l_out/1000,r_ITO_smt=r_ITO_smt/200)]%>%
+                             melt(.,id.var=c("rec_time")),#Rate_L=Rate_L*50,
+                     aes(x=rec_time,y=value,color=variable))+geom_point()#+facet_wrap(~variable,ncol=1)#size=0.1
+
+ggplot(data.pe.post.combined[rec_time>as.POSIXct("2025-10-30 11:00:00")]%>% #,"Rate_L","t_glass" [,c("rec_time","t_env","resistance","t_out","Rate_L","isHeating")]
+           # .[,":="(l_in=l_in/1000,l_out=l_out/1000,r_ITO=r_ITO/200)]%>%#,Rate_L_cal=Rate_L_cal*50
+           # .[,":="(Rate_L=Rate_L*50,l_in_smt=l_in/1000,l_out=l_out/1000,r_ITO_smt=r_ITO_smt/200)]%>%
+           melt(.,id.var=c("rec_time","type")),#Rate_L=Rate_L*50,
+       aes(x=rec_time,y=value,color=type,shape=type))+geom_point()+facet_wrap(~variable,ncol=1)#size=0.1
+
+write.csv(data.pe.post.combined.wide[rec_time>as.POSIXct("2025-10-30 11:00:00"),
+                                     c("rec_time","t_out_old","t_env_old","Rate_L_old","resistance_old","t_out_raw","t_env_raw","Rate_L_raw","resistance_raw")],
+          file = "EF_Processed_final.csv",row.names = FALSE,na = "")
+
+# 重新处理的不太好 只能拼合
+
+
+#### 分钟级数据合并处理 ####
 data.pe.energysim.field.min<-data.pe.energysim.field.raw[,.(rec_time=as.POSIXct(format(as.POSIXct(rec_time[1]),format="%Y-%m-%d %H:%M")),
                                                             count=length(t_in_smt),
                                                             t_in=mean(t_in_smt,na.rm=TRUE),
