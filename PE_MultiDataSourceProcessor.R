@@ -24,7 +24,7 @@ data.pe.raw.test[,':='(A0=extractFromList(msgJson,nameFromJson[1]),
 
 #### 用于处理电化学工作站数据的脚本 ####
 # 数据读取
-data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_ExportData/260605_PR3_ECS_1.xlsx",
+data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_ExportData/260605_PR3_ECS_1.csv",
                        data.table = TRUE,skip=3,sep=",",col.names = c("time","voltage","current","reverseI","charge","vRange","iRange"))
 # 这个charge以后可以用
 data.pe.ecs.raw[,resistance:=voltage/current]

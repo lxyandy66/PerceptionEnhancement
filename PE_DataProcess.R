@@ -6,6 +6,8 @@ options(digits.secs=3)
 data.pe.raw<-read.xlsx("/Volumes/Stroage/PercepetionEnhancement_Share/251016_PreTest.xlsx",1)%>%as.data.table()
 data.pe.raw<-fread("基本测量/250730_D_1K.csv")%>%rbind(fread("基本测量/250731_D_1k.csv"))%>%as.data.table()
 data.pe.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/户外测试数据/251030_EF1.csv",data.table = TRUE)
+data.pe.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_IoT数据/260605_PR3_ECS_1.csv",data.table = TRUE)
+
 referenceR<-5050
 
 #### 数据格式 ####
@@ -20,7 +22,7 @@ data.pe.raw[,msg_content:=gsub('""','"',msg_content)]
 
 data.pe.raw[,msg_content:=gsub('null','-999',msg_content)] #处理热电偶可能出现的NULL导致无法识别
 
-ggplot(data.pe.raw.test,aes(x=rec_time,y=reqId,color=test_id))+geom_point()
+ggplot(data.pe.raw,aes(x=rec_time,y=msg_id,color=test_id))+geom_point()
 
 #建立id
 setorder(data.pe.raw,rec_time)
@@ -45,11 +47,11 @@ nameFromJson<-c( "rq","T_IN","T_OUT","R_ITO" )#c("id","rq","dt","temp_in") "rq",
 data.pe.raw.test[,':='(reqId=extractFromList(msgJson,"rq"),
                    t_in=extractFromList(msgJson,"T_IN"),#t_in
                    t_out=extractFromList(msgJson,"T_OUT"),#t_out
-                   # t_env=extractFromList(msgJson,"T_ENV"),
+                   t_env=extractFromList(msgJson,"T_ENV"),
                    r_ITO=extractFromList(msgJson,"R_ITO"),
                    l_in=extractFromList(msgJson,"L_IN"),
-                   l_out=extractFromList(msgJson,"L_OUT")#,
-                   # isHeating=extractFromList(msgJson,"HEAT")
+                   l_out=extractFromList(msgJson,"L_OUT"),
+                   isHeating=extractFromList(msgJson,"HEAT")
                    )]
 
 
@@ -287,6 +289,19 @@ write.csv(data.pe.post.combined.wide[rec_time>as.POSIXct("2025-10-30 11:00:00"),
 
 
 #### 分钟级数据合并处理 ####
+data.pe.energysim.field.raw<-data.pe.post.combined.wide[,c("rec_time","t_out_old","t_env_old","Rate_L_old","resistance_old","t_out_raw","t_env_raw","Rate_L_raw")]
+# 已归一化平滑等操作后的处理
+data.pe.energysim.field.min<-data.pe.energysim.field.raw[,.(rec_time=as.POSIXct(format(as.POSIXct(rec_time[1]),format="%Y-%m-%d %H:%M")),
+                                                            count=length(t_out_raw),
+                                                            t_out_raw=mean(t_out_raw,na.rm=TRUE),
+                                                            t_out_norm=mean(t_out_old,na.rm=TRUE),
+                                                            t_env_raw=mean(t_env_raw,na.rm=TRUE),
+                                                            t_env_norm=mean(t_env_old,na.rm=TRUE),
+                                                            Rate_L_raw=mean(Rate_L_raw,na.rm=TRUE),
+                                                            Rate_L_norm=mean(Rate_L_old,na.rm=TRUE)
+                                                            ),by=(labelDatetime=format(as.POSIXct(rec_time),format="%Y-%m-%d %H:%M"))]
+
+# 原始数据处理
 data.pe.energysim.field.min<-data.pe.energysim.field.raw[,.(rec_time=as.POSIXct(format(as.POSIXct(rec_time[1]),format="%Y-%m-%d %H:%M")),
                                                             count=length(t_in_smt),
                                                             t_in=mean(t_in_smt,na.rm=TRUE),
@@ -312,12 +327,18 @@ data.pe.energysim.field.min[,Rate_L:=l_in_smt/l_out_smt][Rate_L>1,Rate_L:=1][l_i
 #### 直接分钟级数据 ####
 data.pe.energysim.output<-merge(x=data.pe.energysim.field.min[,c("labelDatetime","rec_time","t_in_smt","t_out_smt","l_in_smt","l_out_smt","r_ITO_smt","Rate_L","t_glass")],
                                 y=data.pe.weather.raw,by.x = "labelDatetime",by.y = "labelDatetime",all.x = TRUE)
+#接直接已归一化平滑等操作后的数据
+nn<-data.pe.energysim.output.scaled[]
+data.pe.energysim.output<-merge(x=data.pe.energysim.field.min[rec_time>=as.POSIXct("2025-10-30 11:00")],
+                                y=data.pe.weather.raw,by.x = "labelDatetime",by.y = "labelDatetime",all.x = TRUE)
 data.pe.energysim.output[,Rate_L_norm_cmb:=normalize(Rate_L)]
 names(data.pe.energysim.output)<-c("labelDatetime","rec_time","t_in","t_out","l_in","l_out","r_ITO","Rate_L","t_glass","time",
                                    "t_env","hum","wind","rad","Rate_L_norm_cmb")
 
 write.csv(data.pe.energysim.output.scaled[,c("labelDatetime","t_glass","r_ITO","l_in","l_out","Rate_L","Rate_L_norm_cmb","t_env","hum",
                                       "wind","rad" )],file = "PE_HIPSimulation_update.csv")
+write.csv(data.pe.energysim.output[,c("labelDatetime","t_out_raw","t_out_norm","t_env_raw","t_env_norm","Rate_L_raw","Rate_L_norm" ,"hum",
+                                             "wind","rad" )],file = "PE_HIPSimulation_final.csv",row.names = FALSE,na = "")
 
 data.pe.energysim.output.scaled<-data.pe.energysim.output
 
@@ -446,7 +467,9 @@ data.pe.raw[resistOutFlag==TRUE]$modiResist<-NA
 data.pe.raw$modiResist<-na.approx(data.pe.raw$modiResist)
 
 data.pe.raw.test[,":="(smtResistance=getMovingAverageValue(abs(resistance),100,onlyPast = FALSE))]
-data.pe.raw.test[resistance<0]$resistance<-NA
+boxplot(data.pe.raw.test$resistance)
+data.pe.raw.test[resistance<(-2000)]$resistance<-NA
+data.pe.raw.test[,resistance:=abs(resistance)]
 
 # 数据状态处理
 tmp<-data.pe.raw.test[rec_time>as.POSIXct("2025-08-18 17:00:00")]
@@ -466,12 +489,12 @@ ggplot(data = data.pe.raw.test[,c("rec_time","t_out","l_in","l_out","msg_id","re
            #.[,r_nor:=scale(resistance)]%>%
            # .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*40000,10,onlyPast = FALSE))]%>% .[,c("rec_time","r_ITO_est","t_mid","id")]
            .[,":="(#t_in=(t_in)*5E1,
-                   t_out=(t_out)*5E1,
+                   t_out=(t_out)*2E1,
                    #t_env=(t_env)*5E1,
-                   l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_out","l_in","l_out","msg_id")]%>%#"t_in",,"t_env"
+                   l_in=l_in*4E0,l_out=l_out*4E0)]%>%.[,c("rec_time","resistance","t_out","l_in","l_out","msg_id")]%>%#"t_in",,"t_env"
                melt(.,id.var=c("msg_id","rec_time")),
        aes(x=rec_time,y=value,color=variable,lty=variable,group=variable))+geom_line()+
-    labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./5E1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
+    labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./2E1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 

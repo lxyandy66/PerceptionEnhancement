@@ -4,9 +4,11 @@
 ################################################################################
 data.pe.predict<-fread("/Users/Mr_Li/Documents/博后一/专利_Transfer Learning/Code_ECS所有样品参与测试训练集/EF_Test/all_predictions_20260313_155854.csv",data.table = TRUE)
 
-data.pe.predict<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Result/IF/train_predictions.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
+# test_metrics_20260708_202315.csv
+
+data.pe.predict<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/Transfer_260708/train_predictions_20260708_202314.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
 data.pe.predict<-rbind(data.pe.predict,
-                       fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Result/IF/test_predictions.csv",data.table = TRUE)%>%cbind(data.table("type"="test")))
+                       fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/Transfer_260708/test_predictions.csv",data.table = TRUE)%>%cbind(data.table("type"="test")))
 
 data.pe.ecs<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Result/ECS/pretrain_predictions_train.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
 data.pe.ecs<-rbind(data.pe.ecs,
@@ -18,6 +20,10 @@ names(data.pe.predict)[15]<-"dataset_source"
 
 data.pe.predict[,rec_time:=as.POSIXct(rec_time)]
 setorder(data.pe.predict,rec_time)
+
+# 分钟级数据处理
+data.pe.predict.min<-data.pe.predict[,.(
+    Rate_L_pred_normalized=mean(Rate_L_pred_normalized,na.rm=TRUE)),by=(TimeMin=format(as.POSIXct(rec_time),format="%Y-%m-%d %H:%M"))]
 
 for(i in unique(data.pe.predict$CycleNo)){#有时是source_folder dataset_source
     data.pe.predict$msg_id<-c(1:(nrow(data.pe.predict)))
