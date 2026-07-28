@@ -1,0 +1,126 @@
+ 修改之前，对于单个zone的多策略模拟，用到了哪些脚本，输出文件和文件夹是什么
+
+  Thought for 22s (ctrl+o to expand)
+
+● 南窗单区（OneWindow）多策略模拟：
+
+  Python 脚本
+
+  ┌───────────────────────────┬───────────────────────────────────────────┐
+  │           脚本            │                   用途                    │
+  ├───────────────────────────┼───────────────────────────────────────────┤
+  │ run_all_denver.py         │ 单区 IDF 初始化（init_idf()）+ 6 策略运行 │
+  ├───────────────────────────┼───────────────────────────────────────────┤
+  │ plugin_weather_only.py    │ 天气覆写                                  │
+  ├───────────────────────────┼───────────────────────────────────────────┤
+  │ plugin_hil_multi_state.py │ 25 态 CSV Rate 驱动                       │
+  ├───────────────────────────┼───────────────────────────────────────────┤
+  │ plugin_env_temp_switch.py │ 环境温度切换两态（后废弃）                │
+  ├───────────────────────────┼───────────────────────────────────────────┤
+  │ plugin_time_switch.py     │ 时间切换两态（后废弃）                    │
+  └───────────────────────────┴───────────────────────────────────────────┘
+
+  文件夹
+
+  ┌───────────────────────┬────────────────────────────┐
+  │        文件夹         │            策略            │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S0a_Native/    │ E+ 原生热致变色            │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S0b_HIL25/     │ HIL 25 态 CSV Rate         │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S1_EC/         │ 环境温度 SwitchableGlazing │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S2_cold_fixed/ │ 固定冷态                   │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S3_hot_fixed/  │ 固定热态                   │
+  ├───────────────────────┼────────────────────────────┤
+  │ Denver_S4_EC/         │ 时间切换 SwitchableGlazing │
+  └───────────────────────┴────────────────────────────┘
+
+  CSV 文件
+
+  Denver_S0a_Eplus_Native_minutely.csv    (26 列)
+  Denver_S0b_HIL_25state_minutely.csv
+  Denver_S1_env_temp_switch_minutely.csv
+  Denver_S2_cold_fixed_minutely.csv
+  Denver_S3_hot_fixed_minutely.csv
+  Denver_S4_time_switch_minutely.csv
+
+  全楼版（building）新增了 S2 玻璃温度 25 态和 S3 混合控制，其余策略从 6 个扩展到覆盖全部 18 窗。
+
+✻ Cogitated for 27s
+
+> 脚本中的“后废弃”，是指什么
+
+  Thought for 6s (ctrl+o to expand)
+
+● 这两个插件用 Python 的 ConstructionState 执行器做两态切换，但执行器始终没生效——窗户一直卡在默认态不切换。后来改用
+  EnergyPlus 原生的 SwitchableGlazing + WindowShadingControl 方案才成功。所以这两个 Python 插件不再使用了。
+
+✻ Cooked for 7s
+
+> 改用原生的 SwitchableGlazing + WindowShadingControl 方案，也是用到了python脚本吗
+
+  Thought for 8s (ctrl+o to expand)
+
+● 不需要。SwitchableGlazing 完全在 IDF 里配置：
+
+  idf
+  Schedule:Compact,          ← 时间触发（S6）
+  WindowShadingControl,      ← 切换逻辑
+      SwitchableGlazing,     ← 切换类型
+      PNIPAM Step 0,         ← 热态构造
+      OnIfScheduleAllows,    ← 调度模式
+      EC_Time_Schedule;      ← 引用上面的 Schedule
+
+  或
+
+  idf
+  WindowShadingControl,
+      SwitchableGlazing,
+      PNIPAM Step 0,
+      OnIfHighOutdoorAirTemperature,  ← 环境温度触发（S7）
+      34.0;                          ← 阈值
+
+  Python 只负责天气覆写（plugin_weather_only.py），窗户切换由 EnergyPlus 原生处理。
+
+✻ Cogitated for 10s
+
+> 相当于，我们在模拟这两个策略的时候，直接改的idf，而没有用到python脚本执行？
+
+  Thought for 7s (ctrl+o to expand)
+
+● 对。S6/S7 跑的时候，Python 脚本做的事是：
+
+  1. 往 IDF 里插入 Schedule:Compact + WindowShadingControl 块
+  2. 把 Plugin 设为 plugin_weather_only（天气覆写）
+  3. 把窗构造设为 PNIPAM Step 24（基态=冷态）
+  4. 启动 EnergyPlus
+
+  运行时只有 plugin_weather_only.py 在工作——覆写天气。窗户的冷热切换是 EnergyPlus 读到 WindowShadingControl
+  后自己完成的，零 Python 参与。
+
+✻ Cogitated for 9s
+
+※ recap: 一直在用 EnergyPlus 模拟 PNIPAM 热致变色窗，最后完成了 Denver 全楼 18 窗 7 种策略的模拟和 CSV
+  导出。对比了单区（南窗）和全楼的脚本与输出差异，确认 S6/S7 的 SwitchableGlazing 是纯 IDF 配置、无需 Python
+  参与切换。下一步你要做什么？
+
+
+● E+ 原生模式：
+
+  室外 → [虚拟透明玻璃 0.1μm] → [零气隙 0.1μm] → [PNIPAM 热致变色层 3mm] → 室内
+           Tsol=0.999               R≈0             冷态 Tsol=0.82
+           λ=221(无热阻)                              热态 Tsol=0.10
+                                                      30-34°C 过渡
+
+  两层虚拟层纯为绕过 E+ 单层 TC 无法算 U 值的限制——光学和热学等效于单层 3mm PNIPAM 水凝胶窗。
+
+  HIL 25态模式：
+
+  室外 → [PNIPAM Step N, 3mm] → 室内
+           Tsol=0.10~0.82
+           λ=0.28(固定)
+
+  真正的单层结构，25 个离散光学状态，Plugin 切换。
