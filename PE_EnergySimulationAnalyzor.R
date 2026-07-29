@@ -87,9 +87,9 @@ for(i in c("T_PERIMETER_MID_ZN_1","T_zone_ave_C")){
                                                                 source%in%c("S3m_MixedMeasurement","S3_predictRateL","S5_HotFixed","S4_ColdFixed"),
                                                             c("datetime","source","T_zone_ave_C","Q_sol_sum_W","Q_gain_sum_W","Cooling_J","T_PERIMETER_MID_ZN_1","Qgain_P_MID_ZN_1_SOUTH_WINDOW","Qsol_P_MID_ZN_1_SOUTH_WINDOW")]%>%
                                          dcast(.,datetime~source,value.var = i)%>%as.data.table%>%.[,.(Variable=i,
-                                                                                                       HIL2Pred=abs(S3m_MixedMeasurement-S3_predictRateL),
-                                                                                                       HIL2Cold=abs(S3m_MixedMeasurement-S4_ColdFixed),
-                                                                                                       HIL2Hot=abs(S3m_MixedMeasurement-S5_HotFixed)),by=datetime]
+                                                                                                       HIL2Pred=(S3m_MixedMeasurement-S3_predictRateL),
+                                                                                                       HIL2Cold=(S3m_MixedMeasurement-S4_ColdFixed),
+                                                                                                       HIL2Hot=(S3m_MixedMeasurement-S5_HotFixed)),by=datetime]
                                      )
 }
 
@@ -185,12 +185,12 @@ for(i in c("bizDay","all")){
         data.pe.energysim.tmy.loc[,c(..j,"city","strategy") ] %>%
             dcast(.,city~strategy,value.var = j)%>%as.data.table%>%.[,":="(type=i,
                                                                           Variable=j,
-                                                                          HIL2Est=abs(S1_EplusNative-S2_GlassTemp),
-                                                                          HIL2Cold=abs(S1_EplusNative - S4_ColdFixed),
-                                                                          HIL2Hot=abs(S1_EplusNative-S5_HotFixed),
-                                                                          HIL2Est_P=abs(S1_EplusNative-S2_GlassTemp)/S1_EplusNative,
-                                                                          HIL2Cold_P=abs(S1_EplusNative - S4_ColdFixed)/S1_EplusNative,
-                                                                          HIL2Hot_P=abs(S1_EplusNative-S5_HotFixed)/S1_EplusNative
+                                                                          HIL2Est=(S1_EplusNative-S2_GlassTemp),
+                                                                          HIL2Cold=(S1_EplusNative - S4_ColdFixed),
+                                                                          HIL2Hot=(S1_EplusNative-S5_HotFixed),
+                                                                          HIL2Est_P=(S1_EplusNative-S2_GlassTemp)/S1_EplusNative,
+                                                                          HIL2Cold_P=(S1_EplusNative - S4_ColdFixed)/S1_EplusNative,
+                                                                          HIL2Hot_P=(S1_EplusNative-S5_HotFixed)/S1_EplusNative
                                                                           )])
     }
 }

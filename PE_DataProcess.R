@@ -5,7 +5,7 @@ options(digits.secs=3)
 # 读取原始数据
 data.pe.raw<-read.xlsx("/Volumes/Stroage/PercepetionEnhancement_Share/251016_PreTest.xlsx",1)%>%as.data.table()
 data.pe.raw<-fread("基本测量/250730_D_1K.csv")%>%rbind(fread("基本测量/250731_D_1k.csv"))%>%as.data.table()
-data.pe.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/户外测试数据/251030_EF1.csv",data.table = TRUE)
+data.pe.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/户外测试数据/251024_IF1_5.csv",data.table = TRUE)
 data.pe.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_IoT数据/260605_PR3_ECS_1.csv",data.table = TRUE)
 
 referenceR<-5050
@@ -14,6 +14,8 @@ referenceR<-5050
 # "log_id","rec_time","msg_id","test_id","data_label","msg_content"(JSON)
 # 原始数据处理
 data.pe.raw$rec_time<-as.POSIXct(data.pe.raw$rec_time)
+# 供未加rec_time的后处理数据加入时间戳rec_time
+#data.pe.raw[,labelTimeMinMsgid:=paste0(substr(rec_time,1,16),"_",msg_id)]
 
 #除去一些有问题的JSON数据
 data.pe.raw[nchar(msg_content)<=10|!startsWith(msg_content,"{")] #看一下问题数据
@@ -22,7 +24,7 @@ data.pe.raw[,msg_content:=gsub('""','"',msg_content)]
 
 data.pe.raw[,msg_content:=gsub('null','-999',msg_content)] #处理热电偶可能出现的NULL导致无法识别
 
-ggplot(data.pe.raw,aes(x=rec_time,y=msg_id,color=test_id))+geom_point()
+ggplot(data.pe.raw[rec_time<as.POSIXct("2025-10-24 21:00")],aes(x=rec_time,y=msg_id,color=test_id))+geom_point()
 
 #建立id
 setorder(data.pe.raw,rec_time)
@@ -33,6 +35,7 @@ setorder(data.pe.raw,rec_time)
 #注意，有些时候JSON里面有两个双引号
 table(data.pe.raw$test_id)
 data.pe.raw$id<-as.numeric(NA)
+data.pe.raw$id<-c(1:nrow(data.pe.raw))
 for(i in unique(data.pe.raw$test_id)){
     data.pe.raw[test_id==i]$id<-c(1:(nrow(data.pe.raw[test_id==i])))
 }
@@ -47,18 +50,19 @@ nameFromJson<-c( "rq","T_IN","T_OUT","R_ITO" )#c("id","rq","dt","temp_in") "rq",
 data.pe.raw.test[,':='(reqId=extractFromList(msgJson,"rq"),
                    t_in=extractFromList(msgJson,"T_IN"),#t_in
                    t_out=extractFromList(msgJson,"T_OUT"),#t_out
-                   t_env=extractFromList(msgJson,"T_ENV"),
+                   #t_env=extractFromList(msgJson,"T_ENV"),
                    r_ITO=extractFromList(msgJson,"R_ITO"),
                    l_in=extractFromList(msgJson,"L_IN"),
-                   l_out=extractFromList(msgJson,"L_OUT"),
-                   isHeating=extractFromList(msgJson,"HEAT")
+                   l_out=extractFromList(msgJson,"L_OUT")
+                   #isHeating=extractFromList(msgJson,"HEAT")
                    )]
 
-
+data.pe.raw.test[,labelMsgIdLinLout:=paste0(msg_id,"_", sprintf("%.0f", l_in),"_", sprintf("%.0f", l_out)  )]
+data.pe.raw.test[,labelTimeMsgid:=paste(format(rec_time,format="%m-%d_%H:%M"),msg_id,sep = "_")]
 
 # 电阻值预估
 data.pe.raw.test[,resistance:=r_ITO/(65535-r_ITO)*referenceR]#100000
-ggplot(data.pe.raw.test,aes(x=r_ITO,y=resistance))+geom_point() #电阻转换的线性关系预览
+ggplot(data.pe.raw.test[rec_time<as.POSIXct("2025-10-24 23:59:00")],aes(x=rec_time,y=msg_id))+geom_point() #电阻转换的线性关系预览
 
 #### 温度修正 ####
 boxplot(data.pe.raw.test[,c("t_in","t_out")])
@@ -113,26 +117,48 @@ names(data.pe.raw.test)[1]<-"rec_time"
 data.temp1<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Data/combined_cleaned_data_Field_with_split_merged_cycle_normalized_combined_processed.csv",data.table = TRUE)
 data.temp2<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Data/combined_cleaned_data_Field_with_split_merged_cycle_normalized_combined.csv",data.table = TRUE)
 
+data.temp2.if.norm<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Data/combined_cleaned_data_Field_with_split_merged_normalized_IF_smoothed2.csv",data.table = TRUE)
+
+
+#### IF处理 ####
+sum(data.temp2.if.raw[!isduplicated]$labelMsgIdLinLout%in% data.pe.raw.test$labelMsgIdLinLout)
+
+nrow(data.temp1[source_folder=="IF1_1024_Field"]) #38436
+data.temp2.if.raw.part<-data.temp1[source_folder=="IF1_1024_Field"] #这一部分是最终使用的
+
+data.temp2.if.raw<-data.temp2[source_folder=="IF1_1024_Field"] #81394
+data.temp2.if.raw$ref_time<-NULL#as.POSIXct(NA)
+data.temp2.if.raw$rec_time<-data.temp2.if.raw$ref_time
+#
+write.csv(data.temp2.if.raw,file="IF_Full.csv",row.names = FALSE,na = "") #full可以用，但是跑出来效果不好
+
+
+table(data.temp2.if.raw[duplicated(data.temp2.if.raw$ref_time)]$ref_time)%>%View
+# 分段处理合并
+#data.temp2.if.raw[1:272],y=data.pe.raw.test[29:300
+#data.temp2.if.raw[273:988],y=data.pe.raw.test[301:1016
+#data.temp2.if.raw[989:nrow(data.temp2.if.raw)],y=data.pe.raw.test[1017:nrow(data.pe.raw.test)
+data.temp2.if.raw[989:nrow(data.temp2.if.raw)]$rec_time<-merge(x=data.temp2.if.raw[989:nrow(data.temp2.if.raw)],y=data.pe.raw.test[1017:nrow(data.pe.raw.test),c("rec_time","msg_id")],by.x="msg_id",by.y="msg_id",all.x=TRUE,sort = FALSE)$rec_time
+
+
+
 data.temp2.ef.raw<-data.temp2[source_folder=="EF1_1030_Field"]
 
 data.temp2.ef.norm<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Data/combined_cleaned_data_Field_with_split_merged_normalized_EF_smoothed.csv",data.table = TRUE)
 #万幸还好另外一个文件有时间戳 虽然不完整但是够了
 # 检查一下这两个文件是不是每一行都一样
-sum(round(data.temp2.ef.raw$t_in_norm,3)==round(data.temp2.ef.norm$t_in,3)) #这两个ef文件的每一行是对应的
+sum(round(data.temp2.if.raw.part$t_in_norm,3)==round(data.temp2.if.norm$t_in,3)) #这两个ef文件的每一行是对应的
 nrow(data.temp2.ef.raw)
 # 比较奇怪，t_in/l_out/l_in/resistance这几个norm的是一样，但是t_out不同
 
 
-data.temp2.ef.norm[,rec_time:=as.POSIXct(rec_time)]
-data.temp2.ef.norm[,labelTimeMsgid:=paste(format(rec_time,format="%m-%d_%H:%M"),msg_id,sep = "_")]
+data.temp2.if.norm[,rec_time:=as.POSIXct(rec_time)]
+data.temp2.if.norm[,labelTimeMsgid:=paste(format(rec_time,format="%m-%d_%H:%M"),msg_id,sep = "_")]
 
-data.temp2.ef.norm$rec_time_old<-data.temp2.ef.norm$rec_time
-data.temp2.ef.norm$rec_time<-NULL
-
-data.temp2.ef.norm<-merge(x=data.temp2.ef.norm,y=data.pe.raw.test[,c("labelTimeMsgid","rec_time")],
+data.temp2.if.norm<-merge(x=data.temp2.if.norm,y=data.pe.raw.test[,c("labelTimeMsgid","rec_time")],
                           all.x = TRUE,by.x="labelTimeMsgid",by.y="labelTimeMsgid",sort = FALSE)
 
-data.temp2.ef.raw<-cbind(data.temp2.ef.raw,data.temp2.ef.norm[,c("rec_time","labelTimeMsgid")]) #保留label核对是不是拼接对了
+data.temp2.if.raw.part<-cbind(data.temp2.if.raw.part,data.temp2.if.norm[,c("rec_time","labelTimeMsgid")]) #保留label核对是不是拼接对了
 
 data.temp2.ef.raw[,c("msg_id","rec_time","labelTimeMsgid")]%>%View #核一下
 
@@ -144,7 +170,7 @@ setorder(data.temp2.ef.raw,rec_time,msg_id)
 
 
 data.temp2.ef.norm$rec_time_old<-NULL
-write.csv(data.temp2.ef.norm,file="EF1_Norm_Processed_Sort.csv")
+write.csv(data.temp2.if.raw.part,file="IF1_Norm_Processed.csv",row.names = FALSE,na = "")
 setorder(data.temp2.ef.norm,rec_time,msg_id)
 data.temp2.ef.norm$msg_id<-c(1:nrow(data.temp2.ef.norm))
 
@@ -161,16 +187,16 @@ ggplot(nn1%>%melt(.,id.var="rec_time"),aes(x=rec_time,y=value,color=variable))+g
 # 大天才 Raw里面的norm 和Norm里面的Norm 完全不一样 服了
 
 ###### 临时修改 ######
-# 处理清洗掉数据中缺失25-10-31 10:30-13:00部分
+# 处理清洗掉数据中缺失25-10-31 10:30-13:00部分rec_time>as.POSIXct("2025-10-25 12:00")
 
 
-ggplot(data = data.temp2.ef.raw[,c("rec_time","t_out","l_in","l_out","msg_id","resistance")]%>%#"t_in","t_out","t_env",rec_time<as.POSIXct("2025-10-30 12:00")
+ggplot(data = data.temp2.if.raw[,c("rec_time","t_out","t_in","l_in","l_out","msg_id","resistance")]%>%#"t_in","t_out","t_env",rec_time<as.POSIXct("2025-10-30 12:00")
            #.[,r_nor:=scale(resistance)]%>%
            # .[,":="(t_mid=getMovingAverageValue(((t_in+t_out)/2)*40000,10,onlyPast = FALSE))]%>% .[,c("rec_time","r_ITO_est","t_mid","id")]
-           .[,":="(#t_in=(t_in)*5E1,
+           .[,":="(t_in=(t_in)*5E3,
                t_out=(t_out)*5E3,
                #t_env=(t_env)*5E1,
-               l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_out","l_in","l_out","msg_id")]%>%#"t_in",,"t_env"
+               l_in=l_in*1E1,l_out=l_out*1E1)]%>%.[,c("rec_time","resistance","t_in","t_out","l_in","l_out","msg_id")]%>%#"t_in",,"t_env"
            melt(.,id.var=c("msg_id","rec_time")),
        aes(x=rec_time,y=value,color=variable,lty=variable,group=variable))+geom_line()+
     labs(y="Resistance")+scale_y_continuous(sec.axis = sec_axis(~(./5E1),name = "Temperature"))+#facet_wrap(~test_id,nrow = 2)+
