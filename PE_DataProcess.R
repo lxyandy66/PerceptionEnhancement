@@ -140,7 +140,18 @@ table(data.temp2.if.raw[duplicated(data.temp2.if.raw$ref_time)]$ref_time)%>%View
 #data.temp2.if.raw[989:nrow(data.temp2.if.raw)],y=data.pe.raw.test[1017:nrow(data.pe.raw.test)
 data.temp2.if.raw[989:nrow(data.temp2.if.raw)]$rec_time<-merge(x=data.temp2.if.raw[989:nrow(data.temp2.if.raw)],y=data.pe.raw.test[1017:nrow(data.pe.raw.test),c("rec_time","msg_id")],by.x="msg_id",by.y="msg_id",all.x=TRUE,sort = FALSE)$rec_time
 
-
+# 我倒要看看两个文件是不是一样
+# data.temp2.if.norm 从...IF_smoothed2.csv读取
+# data.temp2.if.raw 从大表非process读取即temp2
+nn<-data.temp2.if.norm[,c("rec_time","msg_id","t_in","t_out","Rate_L")][,source:="norm"] 
+names(nn)<-c("rec_time","msg_id","t_in_norm","t_out_norm","Rate_L_norm","source")
+nn1<-data.temp2.if.raw[(rec_time%in%data.temp2.if.norm$rec_time),c("rec_time","msg_id","t_in_norm","t_out_norm","Rate_L_norm")][,source:="big"] 
+nn<-rbind( nn,nn1)
+ggplot(nn%>%melt(.,id.var=c("rec_time","msg_id","source")),aes(x=rec_time,y=value,color=source))+geom_line()+facet_wrap(~variable)
+# !!!!!大天才 Raw里面的norm 和Norm里面的Norm 完全不一样 服了!!!!!!!
+# combined_cleaned_data_Field_with_split_merged_cycle_normalized_combined_processed.csv
+# 和combined_cleaned_data_Field_with_split_merged_cycle_normalized_combined.csv
+# 数据不同
 
 data.temp2.ef.raw<-data.temp2[source_folder=="EF1_1030_Field"]
 
@@ -184,7 +195,7 @@ data.temp2.ef.raw<-fread("EF1_Raw_Processed_noSort.csv",data.table = TRUE)
 nn1<-cbind(data.temp2.ef.raw[,c("rec_time","Rate_L_norm")],data.temp2.ef.norm[,"Rate_L"])
 ggplot(nn1%>%melt(.,id.var="rec_time"),aes(x=rec_time,y=value,color=variable))+geom_point()
 
-# 大天才 Raw里面的norm 和Norm里面的Norm 完全不一样 服了
+# !!!!!大天才 Raw里面的norm 和Norm里面的Norm 完全不一样 服了!!!!!!!
 
 ###### 临时修改 ######
 # 处理清洗掉数据中缺失25-10-31 10:30-13:00部分rec_time>as.POSIXct("2025-10-25 12:00")

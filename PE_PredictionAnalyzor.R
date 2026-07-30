@@ -6,9 +6,9 @@ data.pe.predict<-fread("/Users/Mr_Li/Documents/博后一/专利_Transfer Learnin
 
 # test_metrics_20260708_202315.csv
 
-data.pe.predict<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/Transfer_260708/train_predictions_20260708_202314.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
+data.pe.predict<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/TL_Package_0629_IFfinal/Result/IF_Test/experiment_1/train_predictions_20260629_185141.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
 data.pe.predict<-rbind(data.pe.predict,
-                       fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/Transfer_260708/test_predictions.csv",data.table = TRUE)%>%cbind(data.table("type"="test")))
+                       fread("/Volumes/Stroage/PercepetionEnhancement_Share/TL_Package_0629_IFfinal/Result/IF_Test/experiment_1/train_predictions_20260629_185141.csv",data.table = TRUE)%>%cbind(data.table("type"="test")))
 
 data.pe.ecs<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/PE_Result/TL_Package_250423/Result/ECS/pretrain_predictions_train.csv",data.table = TRUE)%>%cbind(data.table("type"="train"))
 data.pe.ecs<-rbind(data.pe.ecs,
@@ -26,12 +26,19 @@ data.pe.predict.min<-data.pe.predict[,.(
     Rate_L_pred_normalized=mean(Rate_L_pred_normalized,na.rm=TRUE)),by=(TimeMin=format(as.POSIXct(rec_time),format="%Y-%m-%d %H:%M"))]
 
 for(i in unique(data.pe.predict$CycleNo)){#有时是source_folder dataset_source
-    data.pe.predict$msg_id<-c(1:(nrow(data.pe.predict)))
+    data.pe.predict$id<-c(1:(nrow(data.pe.predict)))
 }
 # 切记EF1测试中，多个test_id已合并，因此会出现msg_id不连续且不单调递增的情况，需要重新赋值
 
 
-#### 夜间RateL数据修改 ####
+#> table(data.pe.predict$type)
+#IF数据概览
+#test train   val 
+#15425  8453  3989 
+# 4.3h  3.5h
+
+
+#### 夜间RateL数据修改 用于EF ####
 data.pe.predict[,Predicted_Rate_L_final:=Predicted_Rate_L]
 data.pe.predict[,Predicted_t_out_final:=Predicted_t_out]
 
@@ -44,17 +51,17 @@ data.pe.predict[rec_time>=as.POSIXct("2025-10-31 06:00:00")&rec_time<as.POSIXct(
 
 #数据可视化
 data.pe.predict[msg_id>12500&dataset_source=="EF1_1030_Field",c("msg_id","Delta_L","Rate_L","Predicted_Rate_L")]%>%View
-ggplot(data=data.pe.predict[rec_time>=as.POSIXct("2025-10-31 07:30:00")&rec_time<as.POSIXct("2025-10-31 08:00:00")])+#geom_point(aes(x=msg_id,y=Delta_L,shape="Delta_L"),color="red")+,color="blue",color="green"
-    geom_line(aes(x=rec_time,y=Predicted_t_out_final,color="Inference"),size=1)+
-    geom_line(aes(x=rec_time,y=t_out,color="Measurement"),size=0.5)+labs(y="Temperature",x="Time")+
+ggplot(data=data.pe.predict)+#geom_point(aes(x=msg_id,y=Delta_L,shape="Delta_L"),color="red")+,color="blue",color="green"
+    geom_line(aes(x=id,y=Predicted_t_out,color="Inference"),size=1)+
+    geom_line(aes(x=id,y=t_out,color="Measurement"),size=0.5)+labs(y="Temperature",x="Time")+
     # geom_point(aes(x=msg_id,y=resistance_norm*50,color="Resistance"))+
-    # facet_wrap(.~dataset_source+CycleNo,nrow = 2)+
+    facet_wrap(.~type,nrow = 3)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 
-ggplot(data=data.pe.predict[rec_time>=as.POSIXct("2025-10-31 05:30:00")&rec_time<as.POSIXct("2025-10-31 09:00:00")])+#geom_point(aes(x=msg_id,y=Delta_L,shape="Delta_L"),color="red")+,color="blue",color="green"
-    geom_line(aes(x=rec_time,y=Predicted_Rate_L_final,color="Inference"),size=1)+
-    geom_line(aes(x=rec_time,y=Rate_L,color="Measurement"),size=0.5)+labs(y="Transparency",x="Time")+
+ggplot(data=data.pe.predict)+#geom_point(aes(x=msg_id,y=Delta_L,shape="Delta_L"),color="red")+,color="blue",color="green"
+    geom_line(aes(x=id,y=Predicted_Rate_L,color="Inference"),size=1)+
+    geom_line(aes(x=id,y=Rate_L,color="Measurement"),size=0.5)+labs(y="Transparency",x="Time")+
     # geom_point(aes(x=msg_id,y=resistance_norm,color="Resistance"))+
     # facet_wrap(.~dataset_source,nrow = 2)+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
@@ -63,14 +70,14 @@ ggplot(data=data.pe.predict[rec_time>=as.POSIXct("2025-10-31 05:30:00")&rec_time
 
 nn<-rbind(data.pe.predict[,c("t_out","Predicted_t_out","Rate_L","Predicted_Rate_L")],data.pe.predict.ef[,c("t_out","Predicted_t_out","Rate_L","Predicted_Rate_L")])
 
-nn<-data.pe.predict#[rec_time>=as.POSIXct("2025-10-31 06:00:00")&rec_time<as.POSIXct("2025-10-31 18:00:00")]
-getRSquare(pred=nn$Predicted_Rate_L_final,ref = nn$Rate_L)
-getMAPE(yPred=nn$Predicted_Rate_L_final,yLook = nn$Rate_L)
-RMSE(pred=nn$Predicted_Rate_L_final,obs = nn$Rate_L)
+nn<-data.pe.predict[type=="test"]#[rec_time>=as.POSIXct("2025-10-31 06:00:00")&rec_time<as.POSIXct("2025-10-31 18:00:00")]
+getRSquare(pred=nn$Predicted_Rate_L,ref = nn$Rate_L)
+getMAPE(yPred=nn$Predicted_Rate_L,yLook = nn$Rate_L)
+RMSE(pred=nn$Predicted_Rate_L,obs = nn$Rate_L)
 
-getRSquare(pred=nn$Predicted_t_out_final,ref = nn$t_out)
-getMAPE(yPred=nn$Predicted_t_out_final,yLook = nn$t_out)
-RMSE(pred=nn$Predicted_t_out_final,obs = nn$t_out)
+getRSquare(pred=nn$Predicted_t_out,ref = nn$t_out)
+getMAPE(yPred=nn$Predicted_t_out,yLook = nn$t_out)
+RMSE(pred=nn$Predicted_t_out,obs = nn$t_out)
 
 write.csv(data.pe.predict,file="PE_PredictionResult_0729.csv",row.names = FALSE,na = "")
 data.pe.predict<-fread(file="PE_PredictionResult_0729.csv",data.table = TRUE)
