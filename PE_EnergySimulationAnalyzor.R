@@ -26,7 +26,8 @@
 # data.pe.energysim.switch.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/Demo_EnergySimulationData/MidOffice_HIL_13state.csv",
 #                                     data.table = TRUE)%>%.[,":="(type="switch",datetime=seq.POSIXt(from = as.POSIXct("2025-10-30 00:00"),to = as.POSIXct("2025-10-31 23:59"),by="min"))]
 
-# 不同策略批量导入
+#### 不同策略批量导入 ####
+# 适用于典型日的处理，不建议用于TMY
 data.pe.energysim.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0724_Full/Denver_building_S1_Eplus_Native_minutely.csv",
                              data.table = TRUE)%>%.[0,":="(datetime=as.POSIXct("2026-07-08 00:00:00"),source="null")]%>%.[0]
 
@@ -125,13 +126,13 @@ ggplot(data = data.pe.energysim.combined,aes(x=datetime,y= Q_gain_W ,color=type)
 
 #### 典型年数据分析 ####
 
-data.pe.energysim.tmy.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0724_Full/PortoVelho_S6-TimeSwitch_TMY.csv",
+data.pe.energysim.tmy.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/AbuDhabi_S1-EplusNative_TMY_FixedHVAC.csv",
                              data.table = TRUE)%>%.[0,":="(datetime=as.POSIXct("2026-07-08 00:00:00"),city="",strategy="")]%>%.[0]
 
-for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0724_Full")){
+for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/")){
     dataInfo<-strsplit(i,split = "_")%>%unlist
     data.pe.energysim.tmy.raw<-rbind(data.pe.energysim.tmy.raw,
-                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0724_Full/",i),
+                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/",i),
                                        data.table = TRUE)%>%
                                      .[,":="(datetime=seq.POSIXt(from = as.POSIXct("2025-01-01 00:00"),to = as.POSIXct("2025-12-31 23:59"),by="hour"),
                                              city=dataInfo[1],strategy=dataInfo[2])])
@@ -195,9 +196,9 @@ for(i in c("bizDay","all")){
     }
 }
 stat.pe.energysim.tmy.compare[,Variable:=gsub('_BizTime','',Variable)]
-write.csv(stat.pe.energysim.tmy.compare[Variable=="E_sol_sum_kWh"&type=="all",c("city","HIL2Cold","HIL2Hot")],
-          file="PE_Esol_Global_TMY_HILcompare.csv",
-          row.names = FALSE,na = "")
+write.xlsx(stat.pe.energysim.tmy.compare[Variable=="Cooling_J"&type=="all",c("city","HIL2Cold","HIL2Hot")],
+          file="PE_Cooling_Global_TMY_HILcompare_FixedHVAC.xlsx",
+          row.names = FALSE)#Cooling_J
 
 
 ggplot(data.pe.energysim.tmy.month[city=="HongKong"&strategy%in%c("S1_EplusNative","S2_GlassTemp","S4_ColdFixed","S5_HotFixed") ],
