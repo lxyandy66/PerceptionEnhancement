@@ -29,6 +29,9 @@ data.pe.ecs.raw<-fread("/Volumes/Stroage/PercepetionEnhancement_Share/ECStest_Ex
 # 这个charge以后可以用
 data.pe.ecs.raw[,resistance:=voltage/current]
 
+
+
+
 ################################################################################
 
 #### 用于处理气象站数据的脚本 ####

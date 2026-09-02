@@ -28,23 +28,23 @@
 
 #### 不同策略批量导入 ####
 # 适用于典型日的处理，不建议用于TMY
-data.pe.energysim.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0724_Full/Denver_building_S1_Eplus_Native_minutely.csv",
+data.pe.energysim.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802/HK_HIL_S1-EplusNative_FixedHVAC.csv",
                              data.table = TRUE)%>%.[0,":="(datetime=as.POSIXct("2026-07-08 00:00:00"),source="null")]%>%.[0]
 
-for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_0723_newGlass")){
+for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802")){
     data.pe.energysim.raw<-rbind(data.pe.energysim.raw,
-                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_0723_newGlass/",i),
+                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802/",i),
                                                              data.table = TRUE)%>%
                                      .[,":="(datetime=seq.POSIXt(from = as.POSIXct("2025-10-30 00:00"),to = as.POSIXct("2025-10-31 23:59"),by="min"),source=paste0(i))])
 }
-data.pe.energysim.raw[,source:=gsub('.csv','',source)]
-data.pe.energysim.raw[,source:=gsub('Denver_building_','',source)]
-data.pe.energysim.raw[,source:=gsub('_minutely','',source)]
+data.pe.energysim.raw[,source:=gsub('.csv|Denver_building_|HK_HIL_|_FixedHVAC|_minutely','',source)]
+
+setcolorder(data.pe.energysim.raw,c("datetime","TimeIndex","source"))
 # 合并所有窗负荷
 # 思路：
 # Q,温度取平均 能耗直接相加
-data.pe.energysim.raw[,Q_sol_sum_W:=apply(.SD,MARGIN = 1,sum),.SDcol= grep("Qsol", names(data.pe.energysim.raw), value = TRUE)]
-data.pe.energysim.raw[,Q_gain_sum_W:=apply(.SD,MARGIN = 1,sum),.SDcol= grep("Qgain", names(data.pe.energysim.raw), value = TRUE)]
+data.pe.energysim.raw[,Q_sol_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qsol", names(data.pe.energysim.raw), value = TRUE)]
+data.pe.energysim.raw[,Q_gain_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qgain", names(data.pe.energysim.raw), value = TRUE)]
 data.pe.energysim.raw[,T_zone_ave_C:=apply(.SD,MARGIN = 1,mean),.SDcol= c("T_PERIMETER_TOP_ZN_1","T_PERIMETER_MID_ZN_1","T_PERIMETER_TOP_ZN_1")]
 
 # > names(data.pe.energysim.raw)
@@ -65,11 +65,14 @@ data.pe.energysim.hour<-data.pe.energysim.raw[,labelHourSource:=paste0(format(da
        Cooling_J=sum(Cooling_J,na.rm = TRUE)/3600000 #转换为kwh
        ),by=labelHourSource][,labelHourSource:=NULL]
 
+
+data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")&
+                          source%in%c("S3_predictRateL","S3-Mixed","S4-ColdFixed","S5-HotFixed")]
 unique(data.pe.energysim.hour$source)
-ggplot(data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")&
-                                 source%in%c("S3_predictRateL","S3m_MixedMeasurement"),#,"HotFixed","ColdFixed""GlassTemp",#"S1_Eplus_Native","S4_ColdFixed","S5_HotFixed","S2_GlassTemp_25",
-                              c("datetime","source","Cooling_J")],#"T_PERIMETER_TOP_ZN_1","T_PERIMETER_BOT_ZN_1","T_PERIMETER_MID_ZN_1"
-       aes(x=datetime,y=Cooling_J,color=source,shape=source))+geom_line()+geom_point()+
+ggplot(backup.typicalDay.data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")&
+                                 source%in%c("S1_Eplus_Native","S3m_MixedMeasurement"),#,"HotFixed","ColdFixed""GlassTemp",#"S1_Eplus_Native","S4_ColdFixed","S5_HotFixed","S2_GlassTemp_25",
+                              c("datetime","source","Qsol_P_MID_ZN_1_SOUTH_WINDOW"  )],#"T_PERIMETER_TOP_ZN_1","T_PERIMETER_BOT_ZN_1","T_PERIMETER_MID_ZN_1"
+       aes(x=datetime,y=Qsol_P_MID_ZN_1_SOUTH_WINDOW,color=source,shape=source))+geom_line()+geom_point()+
     # labs(y="HVAC energy consumption (kW)",x="Time")+
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
@@ -90,7 +93,8 @@ for(i in c("T_PERIMETER_MID_ZN_1","T_zone_ave_C")){
                                          dcast(.,datetime~source,value.var = i)%>%as.data.table%>%.[,.(Variable=i,
                                                                                                        HIL2Pred=(S3m_MixedMeasurement-S3_predictRateL),
                                                                                                        HIL2Cold=(S3m_MixedMeasurement-S4_ColdFixed),
-                                                                                                       HIL2Hot=(S3m_MixedMeasurement-S5_HotFixed)),by=datetime]
+                                                                                                       HIL2Hot=(S3m_MixedMeasurement-S5_HotFixed),
+                                                                                                       ),by=datetime]
                                      )
 }
 
@@ -102,27 +106,8 @@ stat.pe.energysim.ave.min<-data.pe.energysim.raw[datetime>=as.POSIXct("2025-10-3
                                                                                HIL2Cold=abs(S3m_MixedMeasurement-S4_ColdFixed),
                                                                                HIL2Hot=abs(S3m_MixedMeasurement-S5_HotFixed)),by=datetime]
 
-stat.pe.energysim.mid.hour<-stat.pe.energysim.mid.min[,hour:=format(datetime,format="%Y-%m-%d_%H")][,.(),by=hour]
-
-
-# &source%in%c("HIL","Predict")
 
 ################
-
-# > names(data.pe.energysim.native.raw)
-# [1] "TimeIndex"   "Tzone_C"     "Q_sol_W"     "Q_gain_W"    "Tw_in_C"     "Tw_out_C"    "I_inc_Wm2"  
-# [8] "TC_Spec_T_C" "Tsol_TC"     "type"        "datetime"
-names(data.pe.energysim.switch.raw)[8]<-"Tsol_TC"
-
-data.pe.energysim.combined<-rbind(data.pe.energysim.native.raw[,c("datetime","Q_gain_W","type")],
-                                  data.pe.energysim.switch.raw[,c("datetime","Q_gain_W","type")])
-ggplot(data = data.pe.energysim.combined,aes(x=datetime,y= Q_gain_W ,color=type))+geom_line()
-
-
-
-
-
-
 
 #### 典型年数据分析 ####
 
@@ -196,8 +181,8 @@ for(i in c("bizDay","all")){
     }
 }
 stat.pe.energysim.tmy.compare[,Variable:=gsub('_BizTime','',Variable)]
-write.xlsx(stat.pe.energysim.tmy.compare[Variable=="Cooling_J"&type=="all",c("city","HIL2Cold","HIL2Hot")],
-          file="PE_Cooling_Global_TMY_HILcompare_FixedHVAC.xlsx",
+write.xlsx(stat.pe.energysim.tmy.compare[Variable=="E_sol_sum_kWh"&type=="all",c("city","HIL2Cold","HIL2Hot","HIL2Cold_P","HIL2Hot_P")],
+          file="PE_Esol_Global_TMY_HILcompare_FixedHVAC.xlsx",
           row.names = FALSE)#Cooling_J
 
 
@@ -219,32 +204,34 @@ ggplot(stat.pe.energysim.tmy.compare[,c("city","Variable","type","HIL2Est_P","HI
 
 
 
-#### 批量合并并处理 ####
-#作废！
-data.pe.energysim.native.long<-melt(data.pe.energysim.native.raw[,-c("type","TC_Spec_T_C")],id.vars = c("TimeIndex","datetime"))%>%
-    .[,labelMinutesVar:=paste(TimeIndex,variable,sep="_")]
-names(data.pe.energysim.native.long)[4]<-"native" #计算方法名字
-data.pe.energysim.switch.long<-melt(data.pe.energysim.switch.raw[,-c("type")],id.vars = c("TimeIndex","datetime"))%>%
-    .[,labelMinutesVar:=paste(TimeIndex,variable,sep="_")]
-names(data.pe.energysim.switch.long)[4]<-"switch"
+#### CFD模拟数据处理 ####
+# 输入为HIL模式下对应的CFD模拟参数输出
+# HK_HIL_S3_MidSouth_CFD_Inputs.csv 该文件由WorkStation生成
+data.pe.energysim.cfd.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/HK_HIL_S3_MidSouth_CFD_Inputs.csv",data.table = TRUE)
+data.pe.energysim.cfd.full<-fread(file="HK_HIL_S3-Mixed_forCFD_full_new.csv",data.table=TRUE)
 
-data.pe.energysim.compared<-merge(x=data.pe.energysim.native.long,y=data.pe.energysim.switch.long[,c("labelMinutesVar","switch")],
-                                  all.x=TRUE,by = "labelMinutesVar",sort = FALSE)
-data.pe.energysim.compared[,bias:=abs(native-switch)]
+data.pe.energysim.cfd.full<-cbind(datetime=seq.POSIXt(from = as.POSIXct("2025-10-30 00:00"),to = as.POSIXct("2025-10-31 23:59"),by="min"),data.pe.energysim.cfd.full)
+colName<-names(data.pe.energysim.cfd.full)[c(-1,-2)]
+data.pe.energysim.cfd.full[,labelHourSource:=(format(datetime,format="%Y-%m-%d_%H"))]
+data.pe.energysim.cfd.full.hour<-data.pe.energysim.cfd.full[,(colName=lapply(.SD, mean,na.rm=TRUE)),by=labelHourSource ] #%>%melt(.,id.var=c("labelHourSource","datetime","TimeIndex"))
 
-# 日内逐时误差统计
-stat.pe.energysim.hour<-data.pe.energysim.compared%>%{
-    # .$labelVarHour<-paste(variable,format(.$datetime,format="%Y-%m-%d_%H"))
-    .<-.[,.(variable=variable[1],
-            
-            native=sum(native/60,na.rm = TRUE),
-            switch=sum(switch/60,na.rm = TRUE)), #这么直接加对吗？
-         by=(labelVarHour=paste(variable,format(.$datetime,format="%Y-%m-%d_%H")))]
-    # .[,hour:=format(datetime,format="%Y-%m-%d_%H")] #不能用:=，会直接改原始表格
-    .$bias<-abs(.$native-.$switch) 
-    .
-}
 
-ggplot(stat.pe.energysim.hour[variable=="Q_gain_W"],aes(x=labelVarHour,y=bias))+geom_point()
+data.pe.energysim.cfd.full[datetime=="2025-10-31 10:44"]%>%melt(.,id.var=c("datetime"))%>%View #2025-10-31 16:16
+
+backup.typicalDay.data.pe.energysim.hour[datetime=="2025-10-31 14:00:00"&source=="S3m_MixedMeasurement"] %>%melt(.,id.var=c("datetime","source"))%>%View
+
+# CFD数据的玻璃温度和实测数据相差有点大
+data.pe.energysim.cfd.full[,Rate_L_infer:= (Qsol_SOUTH_WINDOW_W/30 / Iinc_SOUTH_WINDOW_Wm2) ]
+data.pe.energysim.cfd.full[,deltaT:=t_out_raw-Tso_SOUTH_WINDOW_C]
+# 找一个分别小点的
+View(data.pe.energysim.cfd.full[,c("datetime","deltaT","Rate_L_norm","t_out_raw","Tso_SOUTH_WINDOW_C")])
+
+
+data.pe.energysim.cfd.full<-merge(x=data.pe.energysim.cfd.full,y=data.pe.energysim.output[,c("rec_time","t_out_raw","Rate_L_norm")],by.x="datetime",by.y="rec_time",all.x=TRUE,sort = FALSE)
+
+ggplot(data.pe.energysim.cfd.full,aes(x=datetime,y=deltaT))+geom_line()
+ggplot(data.pe.energysim.cfd.full[,c("datetime","Ts_SOUTH_WINDOW_C","t_out_raw")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
+ggplot(data.pe.energysim.cfd.full[,c("datetime","Rate_L_infer","Rate_L_norm")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
+
 
 
