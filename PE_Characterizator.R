@@ -19,8 +19,6 @@ for(i in unique(data.pe.ecs.post$source_folder)){
     
 }
 
-
-data.pe.ecs.post.tin
 ggplot(data=data.pe.ecs.post.tin[source_folder=="FY2_ECS"],aes(x=(t_in+t_out)/2,y=resistance,color=msg_id,size=as.factor(isHeating)))+
     geom_point(position="jitter")+facet_wrap(~source_folder,nrow=3)
 
@@ -35,3 +33,29 @@ data.pe.ecs.post.rateL<-fread("/Users/Mr_Li/Documents/博后课题项目/Percept
 table(data.pe.ecs.post.rateL$source_folder)
 ggplot(data=data.pe.ecs.post.rateL,aes(x=resistance_norm,y=Rate_L_norm))+
     geom_point(position="jitter")+facet_wrap(~source_folder,nrow=3)
+
+
+data.pe.ecs.post.tin.draft<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/过程可视化文件/annotated_temp.csv",data.table=TRUE)
+for(i in unique(data.pe.ecs.post.tin.draft$source_folder)){
+    write.csv(data.pe.ecs.post.tin.draft[source_folder==i&kept15,-c("kept15","temp_bin")],file=paste0(i,"_Tave_forFig.csv"),row.names = FALSE,na = "")
+}
+# 手动修改
+data.pe.ecs.tave.draft<-fread(paste0("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/",i,"_ECS_Tave_forFig.csv"),data.table=TRUE)[0]
+for (i in c("AA1","EA1","FY1","FY2","IY5","IY4","CY1")){
+    data.pe.ecs.tave.draft<-rbind(data.pe.ecs.tave.draft,fread(paste0("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/",i,"_ECS_Tave_forFig.csv"),data.table=TRUE))
+}
+
+data.pe.ecs.tave.mid<-data.pe.ecs.tave.draft[,.(source_folder=source_folder[1],
+                                                temp_bin_ctr=temp_bin_ctr[1],
+                                                resistance=mean(resistance,na.rm=TRUE)
+                                                ),by=(labelSampleTbin=paste0(source_folder,temp_bin_ctr))]
+for(i in unique(data.pe.ecs.tave.mid$source_folder)){
+    write.csv(data.pe.ecs.tave.mid[source_folder==i],file=paste0(i,"_Tmid_Line_forFig.csv"),row.names = FALSE,na = "")
+}
+
+
+fit<-lm(resistance~temp_bin_ctr,data = data.pe.ecs.tave.mid[source_folder=="CY1_ECS_7286"&temp_bin_ctr>34.75 & temp_bin_ctr >=30.75])
+summary(fit)
+
+AA1_ECS--41.75
+
