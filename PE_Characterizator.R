@@ -28,14 +28,11 @@ write.csv(data.pe.ecs.pickup,file="PE_ECS_PickUp.csv",row.names = FALSE,na = "")
 
 
 #### Agent选取数据可视化 ####
-data.pe.ecs.post.tin<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/PE_ECS_Full_Tin_REV.csv",data.table=TRUE)
-data.pe.ecs.post.rateL<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/过程可视化文件/selected_plot_data_rateL.csv",data.table=TRUE)
-table(data.pe.ecs.post.rateL$source_folder)
-ggplot(data=data.pe.ecs.post.rateL,aes(x=resistance_norm,y=Rate_L_norm))+
-    geom_point(position="jitter")+facet_wrap(~source_folder,nrow=3)
-
 
 data.pe.ecs.post.tin.draft<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/过程可视化文件/annotated_temp.csv",data.table=TRUE)
+data.pe.ecs.post.rateL.draft<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/过程可视化文件/annotated_rateL.csv",data.table=TRUE)
+
+
 for(i in unique(data.pe.ecs.post.tin.draft$source_folder)){
     write.csv(data.pe.ecs.post.tin.draft[source_folder==i&kept15,-c("kept15","temp_bin")],file=paste0(i,"_Tave_forFig.csv"),row.names = FALSE,na = "")
 }
@@ -45,17 +42,32 @@ for (i in c("AA1","EA1","FY1","FY2","IY5","IY4","CY1")){
     data.pe.ecs.tave.draft<-rbind(data.pe.ecs.tave.draft,fread(paste0("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/",i,"_ECS_Tave_forFig.csv"),data.table=TRUE))
 }
 
+# data.pe.ecs.tave.draft<-data.pe.ecs.tave.draft[source_folder!="EA1_ECS"]
 data.pe.ecs.tave.mid<-data.pe.ecs.tave.draft[,.(source_folder=source_folder[1],
                                                 temp_bin_ctr=temp_bin_ctr[1],
                                                 resistance=mean(resistance,na.rm=TRUE)
                                                 ),by=(labelSampleTbin=paste0(source_folder,temp_bin_ctr))]
+setorder(data.pe.ecs.tave.mid,source_folder,temp_bin_ctr)
 for(i in unique(data.pe.ecs.tave.mid$source_folder)){
     write.csv(data.pe.ecs.tave.mid[source_folder==i],file=paste0(i,"_Tmid_Line_forFig.csv"),row.names = FALSE,na = "")
 }
 
-
-fit<-lm(resistance~temp_bin_ctr,data = data.pe.ecs.tave.mid[source_folder=="CY1_ECS_7286"&temp_bin_ctr>34.75 & temp_bin_ctr >=30.75])
+fit<-lm(resistance~temp_bin_ctr,data = data.pe.ecs.tave.mid[source_folder=="CY1_ECS_7286"&temp_bin_ctr>=35.25 ])
 summary(fit)
 
-AA1_ECS--41.75
+#### RateL处理 ####
+data.pe.ecs.rateL.mid<-data.pe.ecs.post.rateL.draft[,.(source_folder=source_folder[1],
+                                                rateL_res_bin=rateL_res_bin[1], # X坐标，电阻的分箱
+                                                resistance=mean(resistance,na.rm=TRUE),
+                                                Rate_L_norm=mean(Rate_L_norm,na.rm=TRUE) #透光率
+                                                ),by=(labelSampleRateLbin=paste0(source_folder,rateL_res_bin))]
 
+setorder(data.pe.ecs.tave.mid,source_folder,temp_bin_ctr)
+
+ggplot(data.pe.ecs.post.rateL.draft[source_folder=="AA1_ECS"],aes(x=resistance,y=Rate_L_norm,color=isHeating))+geom_point()
+
+ggplot(data.pe.ecs.rateL.mid[source_folder=="AA1_ECS"],aes(x=rateL_res_bin,y=Rate_L_norm))+geom_point()
+
+fit.pe.ecs.r2l<-glm(Rate_L_norm~rateL_res_bin,data = data.pe.ecs.rateL.mid[source_folder=="AA1_ECS"],family = quasibinomial)
+summary(fit.pe.ecs.r2l)
+PseudoR2(fit.pe.ecs.r2l)
