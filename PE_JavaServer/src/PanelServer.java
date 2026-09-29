@@ -2,8 +2,6 @@ import java.awt.GridBagConstraints;
 import java.awt.event.ActionEvent;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
-import java.io.IOException;
-import java.math.BigInteger;
 import java.net.Socket;
 import java.util.Date;
 
@@ -24,7 +22,6 @@ import tool.layout.AbstractGridBagPanel;
 import tool.mcu.SerialManager;
 import tool.mcu.ThreadSerial;
 import tool.network.SocketProcessor;
-import tool.network.ThreadServer;
 
 public class PanelServer extends AbstractGridBagPanel {
 
@@ -32,6 +29,7 @@ public class PanelServer extends AbstractGridBagPanel {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
+	protected static final int MAX_CONSOLE_LINES = 4000; //保留大概半小时数据
 	private boolean isBroadcast = true;
 	/**
 	 * 单点发送时设置的socket选择器
@@ -50,6 +48,7 @@ public class PanelServer extends AbstractGridBagPanel {
 	private JButton btShutdown = new JButton("Shutdown");// 关闭按钮，关闭服务器并结束所有连接
 	private JButton btStart = new JButton("Start");// 启动服务器按钮
 	private JButton btInfo = new JButton("States");// 获取按钮
+	private JButton btClean = new JButton("Clean");// 清空框内内容按钮
 
 	private JTextArea taConsole = new JTextArea();// 交互信息显示框
 	private JScrollPane panelConsole = new JScrollPane(taConsole);// 交互信息显示的滚动容器
@@ -173,7 +172,12 @@ public class PanelServer extends AbstractGridBagPanel {
 	private void printText(String str) {
 		SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
+				if (taConsole.getLineCount() > MAX_CONSOLE_LINES) {
+	            	taConsole.setText("");
+	            }
 				taConsole.append("\n" + str);
+				
+				 
 			}
 		});
 	}
@@ -183,6 +187,7 @@ public class PanelServer extends AbstractGridBagPanel {
 	 * 
 	 * @param str
 	 */
+	@SuppressWarnings("unused")
 	private void printHint(String str) {
 		textHint.setText(str);
 	}
@@ -203,7 +208,8 @@ public class PanelServer extends AbstractGridBagPanel {
 		constraints.anchor = GridBagConstraints.CENTER;
 		addComponent(baudComboList, 1, 3, 1, 1);
 		addComponent(btShutdown, 6, 1, 1, 1);
-		addComponent(btInfo, 6, 2, 1, 1);
+//		addComponent(btInfo, 6, 2, 1, 1);
+		addComponent(btClean, 6, 2, 1, 1); //清空内容按键
 		addComponent(btStart, 6, 3, 1, 1);
 		addComponent(textHint, 7, 0, 4, 1);
 		constraints.ipady = 150;
@@ -213,6 +219,7 @@ public class PanelServer extends AbstractGridBagPanel {
 		btInfo.addActionListener(this);
 		btSend.addActionListener(this);
 		btShutdown.addActionListener(this);
+		btClean.addActionListener(this);
 		btStart.addActionListener(this);
 		serialComboList.addActionListener(this);
 		serialComboList.addItemListener(serialCombListen);
@@ -251,7 +258,15 @@ public class PanelServer extends AbstractGridBagPanel {
 			}
 			printText("串口已启动!");
 
-		} else if (e.getSource().equals(btSend)) {
+		} else if (e.getSource().equals(btClean)) {
+			try {
+				taConsole.setText("");
+			} catch (Exception e2) {
+				// TODO: handle exception
+				printText("Error in Send Message: "+e2.getMessage());
+			}
+		} 
+		else if (e.getSource().equals(btSend)) {
 			try {
 					tsSerial.sendMessage(tfTestId.getText().trim());
 			} catch (Exception e2) {

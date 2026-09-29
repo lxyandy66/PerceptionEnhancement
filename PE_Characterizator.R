@@ -45,7 +45,7 @@ for(i in unique(data.pe.ecs.post.tin.draft$source_folder)){
 }
 # 手动修改
 data.pe.ecs.tave.draft<-fread(paste0("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/",i,"_ECS_Tave_forFig.csv"),data.table=TRUE)[0]
-for (i in c("AA1","EA1","FY1","FY2","IY5","IY4","CY1")){
+for (i in c("AA1","EA1","FY1","FY2","IY5","IY4","CY1","FA4")){
     data.pe.ecs.tave.draft<-rbind(data.pe.ecs.tave.draft,fread(paste0("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/",i,"_ECS_Tave_forFig.csv"),data.table=TRUE))
 }
 
@@ -59,18 +59,20 @@ for(i in unique(data.pe.ecs.tave.mid$source_folder)){
     write.csv(data.pe.ecs.tave.mid[source_folder==i],file=paste0(i,"_Tmid_Line_forFig.csv"),row.names = FALSE,na = "")
 }
 
-fit<-lm(resistance~temp_bin_ctr,data = data.pe.ecs.tave.mid[source_folder=="CY1_ECS_7286"&temp_bin_ctr>=35.25 ])
+fit<-lm(resistance~temp_bin_ctr,data = data.pe.ecs.tave.mid[source_folder=="IY5_ECS_7213"&temp_bin_ctr<30.75 ])
 summary(fit)
+
+
 
 #### RateL处理 ####
 data.pe.ecs.rateL.mid<-fread("/Users/Mr_Li/Documents/博后课题项目/PerceptionEnhancement/AgentDataProcessor/过程可视化文件/rateL_midline.csv",data.table = TRUE)
 # 直接读取中线文件 这里处理的方式，S段比较特殊
 
-# data.pe.ecs.post.rateL.draft[,.(source_folder=source_folder[1],
-#                                 rateL_res_bin=rateL_res_bin[1], # X坐标，电阻的分箱
-#                                 resistance=mean(resistance,na.rm=TRUE),
-#                                 Rate_L_norm=mean(Rate_L_norm,na.rm=TRUE) #透光率
-#                                 ),by=(labelSampleRateLbin=paste0(source_folder,rateL_res_bin))]
+data.pe.ecs.rateL.mid.manual<-data.pe.ecs.post.rateL.draft[kept15==TRUE,.(source_folder=source_folder[1],
+                                rateL_res_bin=rateL_res_bin[1], # X坐标，电阻的分箱
+                                resistance=mean(resistance,na.rm=TRUE),
+                                Rate_L_norm=mean(Rate_L_norm,na.rm=TRUE) #透光率
+                                ),by=(labelSampleRateLbin=paste0(source_folder,rateL_res_bin))]
 data.pe.ecs.rateL.mid<-data.pe.ecs.rateL.mid[branch=="full"][,-"branch"]
 setorder(data.pe.ecs.rateL.mid,sample,resistance)
 
@@ -84,7 +86,7 @@ for(i in unique(data.pe.ecs.post.rateL.draft$source_folder)){
     
 
 ggplot(data.pe.ecs.post.rateL.draft[source_folder=="AA1_ECS"],aes(x=resistance,y=Rate_L_norm,color=isHeating))+geom_point()
-ggplot(data.pe.ecs.rateL.mid[source_folder=="AA1_ECS"],aes(x=rateL_res_bin,y=Rate_L_norm))+geom_point()
+ggplot(data.pe.ecs.rateL.mid[source_folder=="FA4_ECS"],aes(x=rateL_res_bin,y=Rate_L_norm))+geom_point()
 
 # 用中线文件直接拟合没问题，似乎原始文件用分箱聚合有点问题
 fit.pe.ecs.r2l<-glm(Rate_L_norm~log10(resistance),data = data.pe.ecs.rateL.mid[sample=="AA1_ECS"&branch=="full"],family = quasibinomial) #quasi

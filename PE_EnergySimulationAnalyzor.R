@@ -216,7 +216,7 @@ data.pe.energysim.cfd.full[,labelHourSource:=(format(datetime,format="%Y-%m-%d_%
 data.pe.energysim.cfd.full.hour<-data.pe.energysim.cfd.full[,(colName=lapply(.SD, mean,na.rm=TRUE)),by=labelHourSource ] #%>%melt(.,id.var=c("labelHourSource","datetime","TimeIndex"))
 
 
-data.pe.energysim.cfd.full[datetime=="2025-10-31 10:44"]%>%melt(.,id.var=c("datetime"))%>%View #2025-10-31 16:16
+data.pe.energysim.cfd.full[datetime=="2025-10-30 12:33"]%>%melt(.,id.var=c("datetime"))%>%View #2025-10-31 16:16 2025-10-31 10:44
 
 backup.typicalDay.data.pe.energysim.hour[datetime=="2025-10-31 14:00:00"&source=="S3m_MixedMeasurement"] %>%melt(.,id.var=c("datetime","source"))%>%View
 
@@ -224,14 +224,14 @@ backup.typicalDay.data.pe.energysim.hour[datetime=="2025-10-31 14:00:00"&source=
 data.pe.energysim.cfd.full[,Rate_L_infer:= (Qsol_SOUTH_WINDOW_W/30 / Iinc_SOUTH_WINDOW_Wm2) ]
 data.pe.energysim.cfd.full[,deltaT:=t_out_raw-Tso_SOUTH_WINDOW_C]
 # 找一个分别小点的
-View(data.pe.energysim.cfd.full[,c("datetime","deltaT","Rate_L_norm","t_out_raw","Tso_SOUTH_WINDOW_C")])
+View(data.pe.energysim.cfd.full[,c("datetime","deltaT","Rate_L_norm","Rate_L_infer","t_out_raw","Tso_SOUTH_WINDOW_C","Msup_kgs")])
 
 
 data.pe.energysim.cfd.full<-merge(x=data.pe.energysim.cfd.full,y=data.pe.energysim.output[,c("rec_time","t_out_raw","Rate_L_norm")],by.x="datetime",by.y="rec_time",all.x=TRUE,sort = FALSE)
 
-ggplot(data.pe.energysim.cfd.full,aes(x=datetime,y=deltaT))+geom_line()
-ggplot(data.pe.energysim.cfd.full[,c("datetime","Ts_SOUTH_WINDOW_C","t_out_raw")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
-ggplot(data.pe.energysim.cfd.full[,c("datetime","Rate_L_infer","Rate_L_norm")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
+ggplot(data.pe.energysim.cfd.full[datetime>=as.POSIXct("2025-10-30 12:00:00")&datetime<as.POSIXct("2025-10-30 13:30:00")],aes(x=datetime,y=Msup_kgs))+geom_line()
+ggplot(data.pe.energysim.cfd.full[datetime>=as.POSIXct("2025-10-30 12:00:00")&datetime<as.POSIXct("2025-10-30 13:30:00"),c("datetime","Ts_SOUTH_WINDOW_C","t_out_raw")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
+ggplot(data.pe.energysim.cfd.full[datetime>=as.POSIXct("2025-10-30 12:00:00")&datetime<as.POSIXct("2025-10-30 13:30:00"),c("datetime","Rate_L_infer","Rate_L_norm")] %>% melt(.,id.var=c("datetime")),aes(x=datetime,y=value,color=variable))+geom_line()
 
 
 
