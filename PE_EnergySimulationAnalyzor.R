@@ -28,21 +28,21 @@
 
 #### 不同策略批量导入 ####
 # 适用于典型日的处理，不建议用于TMY
-data.pe.energysim.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802/HK_HIL_S1-EplusNative_FixedHVAC.csv",
+data.pe.energysim.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_1020/HK_HIL_S1-EplusNative_FixedHVAC_261020.csv",
                              data.table = TRUE)%>%.[0,":="(datetime=as.POSIXct("2026-07-08 00:00:00"),source="null")]%>%.[0]
 
-for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802")){
+for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_1020", pattern = "\\.")){
     data.pe.energysim.raw<-rbind(data.pe.energysim.raw,
-                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_0802/",i),
+                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TypicalDay_fixedHVAC_1020/",i),
                                                              data.table = TRUE)%>%
                                      .[,":="(datetime=seq.POSIXt(from = as.POSIXct("2025-10-30 00:00"),to = as.POSIXct("2025-10-31 23:59"),by="min"),source=paste0(i))])
 }
-data.pe.energysim.raw[,source:=gsub('.csv|Denver_building_|HK_HIL_|_FixedHVAC|_minutely','',source)]
+data.pe.energysim.raw[,source:=gsub('.csv|Denver_building_|HK_HIL_|_FixedHVAC|_minutely|_261020','',source)]
 
 setcolorder(data.pe.energysim.raw,c("datetime","TimeIndex","source"))
 # 合并所有窗负荷
 # 思路：
-# Q,温度取平均 能耗直接相加
+# Q,温度取平均 能耗直接相加  ##261022注：对于分钟统计到小时是可以这样的
 data.pe.energysim.raw[,Q_sol_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qsol", names(data.pe.energysim.raw), value = TRUE)]
 data.pe.energysim.raw[,Q_gain_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qgain", names(data.pe.energysim.raw), value = TRUE)]
 data.pe.energysim.raw[,T_zone_ave_C:=apply(.SD,MARGIN = 1,mean),.SDcol= c("T_PERIMETER_TOP_ZN_1","T_PERIMETER_MID_ZN_1","T_PERIMETER_TOP_ZN_1")]
@@ -59,15 +59,15 @@ data.pe.energysim.hour<-data.pe.energysim.raw[,labelHourSource:=paste0(format(da
        T_PERIMETER_MID_ZN_1=mean(T_PERIMETER_MID_ZN_1,na.rm=TRUE), #取一个特别的中层南区
        Qgain_P_MID_ZN_1_SOUTH_WINDOW=mean(Qgain_P_MID_ZN_1_SOUTH_WINDOW,na.rm=TRUE),
        Qsol_P_MID_ZN_1_SOUTH_WINDOW =mean(Qsol_P_MID_ZN_1_SOUTH_WINDOW,na.rm=TRUE),
-       Q_sol_sum_W=mean(Q_sol_sum_W,na.rm=TRUE),
-       Q_gain_sum_W=mean(Q_gain_sum_W,na.rm=TRUE),
+       Q_sol_sum_W=mean(Q_sol_sum_W,na.rm=TRUE), #这里注意 上面Q取平均可能有问题
+       Q_gain_sum_W=mean(Q_gain_sum_W,na.rm=TRUE), #这里注意 上面Q取平均可能有问题
        # I_inc_W5_Wm2=mean(I_inc_W5_Wm2,na.rm=TRUE),
-       Cooling_J=sum(Cooling_J,na.rm = TRUE)/3600000 #转换为kwh
+       Cooling_J_MidZN1=sum(Cooling_J_MidZN1,na.rm = TRUE)/3600000 #转换为kwh
        ),by=labelHourSource][,labelHourSource:=NULL]
 
 
-data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")&
-                          source%in%c("S3_predictRateL","S3-Mixed","S4-ColdFixed","S5-HotFixed")]
+data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")]%>%View 
+    # &source%in%c("S3_predictRateL","S3-Mixed","S4-ColdFixed","S5-HotFixed")
 unique(data.pe.energysim.hour$source)
 ggplot(backup.typicalDay.data.pe.energysim.hour[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetime<as.POSIXct("2025-10-31 18:00:00")&
                                  source%in%c("S1_Eplus_Native","S3m_MixedMeasurement"),#,"HotFixed","ColdFixed""GlassTemp",#"S1_Eplus_Native","S4_ColdFixed","S5_HotFixed","S2_GlassTemp_25",
@@ -84,6 +84,7 @@ ggplot(data.pe.energysim.raw[datetime>=as.POSIXct("2025-10-31 06:00:00")&datetim
     theme_bw()+theme(axis.text=element_text(size=14),axis.title=element_text(size=16,face="bold"),legend.text = element_text(size=14))
 
 #### 统计数据：小时级各策略区别 ####
+#建议丢到excel里手动统计
 stat.pe.energysim.compare<-data.table(datetime=as.POSIXct("2025-10-31 06:00:00"),Variable="",HIL2Pred=-999,HIL2Cold=-999,HIL2Hot=-999)[0]
 for(i in c("T_PERIMETER_MID_ZN_1","T_zone_ave_C")){
     stat.pe.energysim.compare<-rbind(stat.pe.energysim.compare,
@@ -111,13 +112,13 @@ stat.pe.energysim.ave.min<-data.pe.energysim.raw[datetime>=as.POSIXct("2025-10-3
 
 #### 典型年数据分析 ####
 
-data.pe.energysim.tmy.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/AbuDhabi_S1-EplusNative_TMY_FixedHVAC.csv",
+data.pe.energysim.tmy.raw<-fread(file = "/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_1020_Full_GlobalResult_FixHVAC/AbuDhabi_S1-EplusNative_TMY_FixedHVAC_261020.csv",
                              data.table = TRUE)%>%.[0,":="(datetime=as.POSIXct("2026-07-08 00:00:00"),city="",strategy="")]%>%.[0]
 
-for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/")){
+for( i in list.files("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_1020_Full_GlobalResult_FixHVAC/", pattern = "\\.")){
     dataInfo<-strsplit(i,split = "_")%>%unlist
     data.pe.energysim.tmy.raw<-rbind(data.pe.energysim.tmy.raw,
-                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_0730_Full_GlobalResult_FixHVAC/",i),
+                                 fread(file = paste0("/Volumes/Stroage/PercepetionEnhancement_Share/PE_EnergyplusSimulation/Building_TMY_1020_Full_GlobalResult_FixHVAC/",i),
                                        data.table = TRUE)%>%
                                      .[,":="(datetime=seq.POSIXt(from = as.POSIXct("2025-01-01 00:00"),to = as.POSIXct("2025-12-31 23:59"),by="hour"),
                                              city=dataInfo[1],strategy=dataInfo[2])])
@@ -127,8 +128,8 @@ setcolorder(data.pe.energysim.tmy.raw,c( "datetime","city","strategy"))
 # 合并所有窗负荷
 # 思路：
 # Q,温度取平均 能耗直接相加 (Q单位为W，时间步长为小时，除以1000累加则即为kWh)
-data.pe.energysim.tmy.raw[,Q_sol_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qsol", names(data.pe.energysim.raw), value = TRUE)]
-data.pe.energysim.tmy.raw[,Q_gain_sum_W:=apply(.SD,MARGIN = 1,mean),.SDcol= grep("Qgain", names(data.pe.energysim.raw), value = TRUE)]
+data.pe.energysim.tmy.raw[,Q_sol_sum_W:=apply(.SD,MARGIN = 1,sum),.SDcol= grep("Qsol", names(data.pe.energysim.raw), value = TRUE)]
+data.pe.energysim.tmy.raw[,Q_gain_sum_W:=apply(.SD,MARGIN = 1,sum),.SDcol= grep("Qgain", names(data.pe.energysim.raw), value = TRUE)]
 data.pe.energysim.tmy.raw[,T_zone_ave_C:=apply(.SD,MARGIN = 1,mean),.SDcol= c("T_PERIMETER_TOP_ZN_1","T_PERIMETER_MID_ZN_1","T_PERIMETER_TOP_ZN_1")]
 data.pe.energysim.tmy.raw[,strategy:=gsub('-','_',strategy)]
 
@@ -136,33 +137,30 @@ data.pe.energysim.tmy.month<-data.pe.energysim.tmy.raw[,":="(month=month(datetim
     ,.(city=city[1],
        strategy=strategy[1],
        month=month[1],
-       Q_sol_sum_W=mean(Q_sol_sum_W,na.rm=TRUE),
-       Q_gain_sum_W=mean(Q_gain_sum_W,na.rm=TRUE),
+       Q_sol_sum_W=sum(Q_sol_sum_W,na.rm=TRUE),
+       Q_gain_sum_W=sum(Q_gain_sum_W,na.rm=TRUE),
        E_sol_sum_kWh=sum(Q_sol_sum_W,na.rm=TRUE)/1000,
        E_gain_sum_kWh=sum(Q_gain_sum_W,na.rm=TRUE)/1000, # data.pe.energysim.tmy.raw为小时步长，Q/1000即为kW
        Cooling_J=sum(Cooling_J,na.rm = TRUE)
        ),by=labelCityStrategyMonth]
 
+View(data.pe.energysim.tmy.month[city=="HongKong"])
+
 data.pe.energysim.tmy.loc<-data.pe.energysim.tmy.raw[,.(city=city[1],
                                                         strategy=strategy[1],
-                                                        Q_sol_sum_W=mean(Q_sol_sum_W,na.rm=TRUE),
-                                                        Q_gain_sum_W=mean(Q_gain_sum_W,na.rm=TRUE),
-                                                        E_sol_sum_kWh=sum(Q_sol_sum_W,na.rm=TRUE)/1000,
+                                                        E_sol_sum_kWh=sum(Q_sol_sum_W,na.rm=TRUE)/1000, #原单位为W 时间间隔为小时，则此处为kWh
                                                         E_gain_sum_kWh=sum(Q_gain_sum_W,na.rm=TRUE)/1000,
-                                                        Cooling_J=sum(Cooling_J,na.rm = TRUE)),
-                                                     by=(labelCityStrategy=paste(city,strategy))] %>%
-                                    cbind(data.pe.energysim.tmy.raw[hour(datetime)%in%c(6:18),.(
-                                                                Q_sol_sum_W_BizTime=mean(Q_sol_sum_W,na.rm=TRUE),
-                                                                Q_gain_sum_W_BizTime=mean(Q_gain_sum_W,na.rm=TRUE),
-                                                                E_sol_sum_kWh_BizTime=sum(Q_sol_sum_W,na.rm=TRUE)/1000,
-                                                                E_gain_sum_kWh_BizTime=sum(Q_gain_sum_W,na.rm=TRUE)/1000,
-                                                                Cooling_J_BizTime=sum(Cooling_J,na.rm = TRUE)),
-                                    by=(labelCityStrategy_BizTime=paste(city,strategy))])
+                                                        Cooling_J=sum(Cooling_J,na.rm = TRUE),
+                                                        E_sol_sum_kWh_BizTime=sum(Q_sol_sum_W[hour(datetime)%in%6:18],na.rm=TRUE)/1000,
+                                                        E_gain_sum_kWh_BizTime=sum(Q_gain_sum_W[hour(datetime)%in%6:18],na.rm=TRUE)/1000,
+                                                        Cooling_J_BizTime=sum(Cooling_J[hour(datetime)%in%6:18],na.rm = TRUE)),
+                                                     by=(labelCityStrategy=paste(city,strategy))] 
 
 
 # 年度数据统计对比
-stat.pe.energysim.tmy.compare<-data.table(city="",S1_EplusNative=-999,S2_GlassTemp=-999,	S4_ColdFixed=-999,	S5_HotFixed=-999,	S6_TimeSwitch=-999,	S7_EnvTempSwitch=-999,
+stat.pe.energysim.tmy.compare<-data.table(city="",S1_EplusNative=-999,S2_GlassTemp=-999,	S4_ColdFixed=-999,	S5_HotFixed=-999,	S6_TimeSwitch=-999,	S7_EnvTempSwitch30=-999,
                                           Variable="",type="",HIL2Est=-999,	HIL2Cold=-999,	HIL2Hot=-999,	HIL2Est_P=-999,	HIL2Cold_P=-999,	HIL2Hot_P=-999)[0]
+
 
 for(i in c("bizDay","all")){
     for(j in c("E_sol_sum_kWh","E_gain_sum_kWh","Cooling_J")){
@@ -181,9 +179,9 @@ for(i in c("bizDay","all")){
     }
 }
 stat.pe.energysim.tmy.compare[,Variable:=gsub('_BizTime','',Variable)]
-write.xlsx(stat.pe.energysim.tmy.compare[Variable=="E_sol_sum_kWh"&type=="all",c("city","HIL2Cold","HIL2Hot","HIL2Cold_P","HIL2Hot_P")],
-          file="PE_Esol_Global_TMY_HILcompare_FixedHVAC.xlsx",
-          row.names = FALSE)#Cooling_J
+write.xlsx(stat.pe.energysim.tmy.compare[Variable=="E_sol_sum_kWh"&type=="all",c("city","HIL2Cold","HIL2Cold_P","HIL2Hot","HIL2Hot_P")],
+          file="PE_Esol_Global_TMY_HILcompare_FixedHVAC_261022.xlsx",
+          row.names = FALSE)#Cooling_J E_sol_sum_kWh
 
 
 ggplot(data.pe.energysim.tmy.month[city=="HongKong"&strategy%in%c("S1_EplusNative","S2_GlassTemp","S4_ColdFixed","S5_HotFixed") ],
